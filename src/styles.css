@@ -643,3 +643,119 @@ html, body, #root {
   color: #555;
   line-height: 1.4;
 }
+
+/* Collapsible Sections */
+.collapsible {
+  margin-bottom: 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: white;
+  transition: all 0.2s ease;
+}
+
+.collapsible:hover {
+  border-color: #ccc;
+}
+
+.collapsible__trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: linear-gradient(to bottom, #f8f9fa 0%, #f0f1f3 100%);
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.collapsible__trigger:hover {
+  background: linear-gradient(to bottom, #f0f1f3 0%, #e8e9eb 100%);
+}
+
+.collapsible__trigger:active {
+  background: #e8e9eb;
+}
+
+.collapsible__trigger[data-expanded] {
+  background: linear-gradient(to bottom, #4a90e2 0%, #357abd 100%);
+  color: white;
+}
+
+.collapsible__trigger[data-expanded] .collapsible__icon {
+  color: white;
+}
+
+.collapsible__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: inherit;
+}
+
+.collapsible__icon {
+  font-size: 12px;
+  color: #666;
+  transition: transform 0.2s ease;
+}
+
+.collapsible__trigger[data-expanded] .collapsible__icon {
+  transform: rotate(0deg);
+}
+
+.collapsible__content {
+  overflow: hidden;
+}
+
+.collapsible__content[data-closed] {
+  animation: slideUp 0.2s ease-out;
+}
+
+.collapsible__content[data-expanded] {
+  animation: slideDown 0.2s ease-out;
+  padding: 14px;
+}
+
+@keyframes slideDown {
+  from {
+    height: 0;
+    opacity: 0;
+  }
+  to {
+    height: var(--kb-collapsible-content-height);
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    height: var(--kb-collapsible-content-height);
+    opacity: 1;
+  }
+  to {
+    height: 0;
+    opacity: 0;
+  }
+}
+
+/* Adjustments for control groups inside collapsible */
+.collapsible__content .control-group:last-child {
+  margin-bottom: 0;
+}
+
+.zoom-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.tutorial-info,
+.tutorial-description {
+  margin-bottom: 8px;
+}
+
+.tutorial-info {
+  font-size: 12px;
+  font-weight: 600;
+  color: #4a90e2;
+}
