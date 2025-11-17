@@ -1,0 +1,44 @@
+{
+  "name": "delaunay-triangulation",
+  "version": "2.0.0",
+  "description": "Modular Delaunay triangulation library with customizable rendering and point generation strategies",
+  "type": "module",
+  "main": "src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs",
+    "./core": "./src/core/index.mjs",
+    "./algorithms": "./src/algorithms/BowyerWatson.mjs",
+    "./generators": "./src/generators/PointGenerator.mjs",
+    "./rendering": "./src/rendering/CanvasRenderer.mjs",
+    "./app": "./src/app/DelaunayApp.mjs"
+  },
+  "scripts": {
+    "start": "npx http-server . -p 8080 -o",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "lint": "eslint src/",
+    "format": "prettier --write src/"
+  },
+  "keywords": [
+    "delaunay",
+    "triangulation",
+    "bowyer-watson",
+    "computational-geometry",
+    "visualization",
+    "canvas"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {},
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "files": [
+    "src/",
+    "index.html",
+    "css/"
+  ]
+}
