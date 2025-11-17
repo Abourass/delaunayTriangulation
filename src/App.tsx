@@ -23,6 +23,18 @@ interface ColorModeOption {
   label: string;
 }
 
+interface AnimationModeOption {
+  value: string;
+  label: string;
+  description: string;
+}
+
+interface PointTrail {
+  point: Point;
+  trail: { x: number; y: number; age: number }[];
+  velocity: { x: number; y: number };
+}
+
 interface AlgorithmStep {
   type: 'add_point' | 'find_bad' | 'find_boundary' | 'remove_bad' | 'retriangulate' | 'cleanup';
   description: string;
@@ -46,6 +58,13 @@ const colorModeOptions: ColorModeOption[] = [
   { value: 'area', label: 'By Area' },
   { value: 'aspect', label: 'By Aspect Ratio' },
   { value: 'random', label: 'Random Colors' },
+];
+
+const animationModeOptions: AnimationModeOption[] = [
+  { value: 'none', label: 'None', description: 'No animation' },
+  { value: 'colorFlow', label: 'Color Flow', description: 'Colors cascade through triangle adjacency' },
+  { value: 'particleTrails', label: 'Particle Trails', description: 'Points move with trailing history' },
+  { value: 'kaleidoscope', label: 'Kaleidoscope', description: 'Mirror/rotate for symmetric patterns' },
 ];
 
 function App() {
@@ -81,6 +100,16 @@ function App() {
   const [currentStep, setCurrentStep] = createSignal(0);
   const [isPlaying, setIsPlaying] = createSignal(false);
   const [playSpeed, setPlaySpeed] = createSignal(1000);
+
+  // Animation modes
+  const [animationMode, setAnimationMode] = createSignal('none');
+  const [animationRunning, setAnimationRunning] = createSignal(false);
+  const [colorFlowState, setColorFlowState] = createSignal<Map<number, { hue: number; saturation: number; lightness: number }>>(new Map());
+  const [colorFlowWave, setColorFlowWave] = createSignal(0);
+  const [particleTrails, setParticleTrails] = createSignal<PointTrail[]>([]);
+  const [kaleidoscopeFolds, setKaleidoscopeFolds] = createSignal(6);
+  const [kaleidoscopeRotation, setKaleidoscopeRotation] = createSignal(0);
+  const [animationFrameId, setAnimationFrameId] = createSignal<number | null>(null);
 
   const getGenerator = () => {
     switch (selectedGenerator()) {
@@ -425,6 +454,353 @@ function App() {
     }
 
     ctx.restore();
+  };
+
+  // Build triangle adjacency graph for color flow
+  const buildAdjacencyGraph = (tris: Triangle[]): Map<number, number[]> => {
+    const adjacency = new Map<number, number[]>();
+
+    for (let i = 0; i < tris.length; i++) {
+      adjacency.set(i, []);
+    }
+
+    for (let i = 0; i < tris.length; i++) {
+      for (let j = i + 1; j < tris.length; j++) {
+        // Check if triangles share an edge
+        const edges1 = tris[i].getEdges();
+        const edges2 = tris[j].getEdges();
+
+        let shared = false;
+        for (const e1 of edges1) {
+          for (const e2 of edges2) {
+            if (e1.equals(e2)) {
+              shared = true;
+              break;
+            }
+          }
+          if (shared) break;
+        }
+
+        if (shared) {
+          adjacency.get(i)!.push(j);
+          adjacency.get(j)!.push(i);
+        }
+      }
+    }
+
+    return adjacency;
+  };
+
+  // Initialize color flow animation
+  const initColorFlow = () => {
+    const tris = triangles();
+    if (tris.length === 0) return;
+
+    const colors = new Map<number, { hue: number; saturation: number; lightness: number }>();
+
+    // Initialize with gradient based on position
+    for (let i = 0; i < tris.length; i++) {
+      const centroid = tris[i].getCentroid();
+      const hue = (centroid.x / dimensions().width) * 360;
+      colors.set(i, { hue, saturation: 70, lightness: 50 });
+    }
+
+    setColorFlowState(colors);
+    setColorFlowWave(0);
+  };
+
+  // Update color flow animation
+  const updateColorFlow = () => {
+    const tris = triangles();
+    if (tris.length === 0) return;
+
+    const adjacency = buildAdjacencyGraph(tris);
+    const colors = new Map(colorFlowState());
+    const wave = colorFlowWave();
+
+    // Propagate colors through adjacency with wave effect
+    const newColors = new Map<number, { hue: number; saturation: number; lightness: number }>();
+
+    for (let i = 0; i < tris.length; i++) {
+      const centroid = tris[i].getCentroid();
+      const distFromCenter = Math.sqrt(
+        Math.pow(centroid.x - dimensions().width / 2, 2) +
+        Math.pow(centroid.y - dimensions().height / 2, 2)
+      );
+
+      // Wave emanating from center
+      const wavePhase = (distFromCenter / 50 - wave) % 360;
+      const hue = (wavePhase + 360) % 360;
+
+      // Get average of neighbors for smoothing
+      const neighbors = adjacency.get(i) || [];
+      let avgHue = hue;
+      if (neighbors.length > 0 && colors.size > 0) {
+        let sumHue = hue;
+        for (const n of neighbors) {
+          const nc = colors.get(n);
+          if (nc) sumHue += nc.hue;
+        }
+        avgHue = sumHue / (neighbors.length + 1);
+      }
+
+      newColors.set(i, {
+        hue: avgHue,
+        saturation: 70 + Math.sin(wave * 0.1) * 20,
+        lightness: 50 + Math.cos(distFromCenter * 0.01 + wave * 0.05) * 15,
+      });
+    }
+
+    setColorFlowState(newColors);
+    setColorFlowWave(wave + 2);
+  };
+
+  // Initialize particle trails
+  const initParticleTrails = () => {
+    const currentPoints = points();
+    const trails: PointTrail[] = currentPoints.map((p) => ({
+      point: new Point(p.x, p.y),
+      trail: [{ x: p.x, y: p.y, age: 0 }],
+      velocity: {
+        x: (Math.random() - 0.5) * 2,
+        y: (Math.random() - 0.5) * 2,
+      },
+    }));
+    setParticleTrails(trails);
+  };
+
+  // Update particle trails
+  const updateParticleTrails = () => {
+    const { width, height } = dimensions();
+    const trails = particleTrails().map((pt) => {
+      // Update position with velocity
+      let newX = pt.point.x + pt.velocity.x;
+      let newY = pt.point.y + pt.velocity.y;
+      let newVx = pt.velocity.x;
+      let newVy = pt.velocity.y;
+
+      // Bounce off walls
+      if (newX <= 0 || newX >= width) {
+        newVx = -newVx * 0.9;
+        newX = Math.max(0, Math.min(width, newX));
+      }
+      if (newY <= 0 || newY >= height) {
+        newVy = -newVy * 0.9;
+        newY = Math.max(0, Math.min(height, newY));
+      }
+
+      // Add slight random perturbation
+      newVx += (Math.random() - 0.5) * 0.1;
+      newVy += (Math.random() - 0.5) * 0.1;
+
+      // Limit velocity
+      const speed = Math.sqrt(newVx * newVx + newVy * newVy);
+      if (speed > 3) {
+        newVx = (newVx / speed) * 3;
+        newVy = (newVy / speed) * 3;
+      }
+
+      // Update trail (keep last 20 positions)
+      const newTrail = [
+        { x: newX, y: newY, age: 0 },
+        ...pt.trail.map((t) => ({ ...t, age: t.age + 1 })).slice(0, 19),
+      ];
+
+      return {
+        point: new Point(newX, newY),
+        trail: newTrail,
+        velocity: { x: newVx, y: newVy },
+      };
+    });
+
+    setParticleTrails(trails);
+
+    // Retriangulate with new positions
+    const newPoints = trails.map((t) => t.point);
+    if (newPoints.length >= 3) {
+      const { width, height } = dimensions();
+      const newTriangles = BowyerWatson.triangulate(newPoints, width, height);
+      setPoints(newPoints);
+      setTriangles(newTriangles);
+    }
+  };
+
+  // Render with animations
+  const renderWithAnimation = () => {
+    if (!canvasRef) return;
+    const ctx = canvasRef.getContext('2d');
+    if (!ctx) return;
+
+    const { width, height } = dimensions();
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = backgroundColor();
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.save();
+    ctx.translate(panOffset().x, panOffset().y);
+    ctx.scale(zoom(), zoom());
+
+    const mode = animationMode();
+    const tris = triangles();
+
+    if (mode === 'kaleidoscope') {
+      // Render kaleidoscope effect
+      const folds = kaleidoscopeFolds();
+      const rotation = kaleidoscopeRotation();
+      const centerX = width / 2;
+      const centerY = height / 2;
+
+      for (let fold = 0; fold < folds; fold++) {
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate((fold * Math.PI * 2) / folds + rotation);
+
+        // Mirror every other fold
+        if (fold % 2 === 1) {
+          ctx.scale(-1, 1);
+        }
+
+        ctx.translate(-centerX, -centerY);
+
+        // Draw triangles
+        for (let i = 0; i < tris.length; i++) {
+          const tri = tris[i];
+          const fill = getTriangleColor(tri, i);
+
+          ctx.beginPath();
+          ctx.moveTo(tri.a.x, tri.a.y);
+          ctx.lineTo(tri.b.x, tri.b.y);
+          ctx.lineTo(tri.c.x, tri.c.y);
+          ctx.closePath();
+
+          if (fill) {
+            ctx.fillStyle = fill;
+            ctx.fill();
+          }
+          ctx.strokeStyle = strokeColor();
+          ctx.lineWidth = lineWidth();
+          ctx.stroke();
+        }
+
+        ctx.restore();
+      }
+
+      setKaleidoscopeRotation(rotation + 0.005);
+    } else if (mode === 'colorFlow') {
+      // Render with flowing colors
+      const colors = colorFlowState();
+
+      for (let i = 0; i < tris.length; i++) {
+        const tri = tris[i];
+        const color = colors.get(i);
+
+        ctx.beginPath();
+        ctx.moveTo(tri.a.x, tri.a.y);
+        ctx.lineTo(tri.b.x, tri.b.y);
+        ctx.lineTo(tri.c.x, tri.c.y);
+        ctx.closePath();
+
+        if (color) {
+          ctx.fillStyle = `hsl(${color.hue}, ${color.saturation}%, ${color.lightness}%)`;
+          ctx.fill();
+        }
+        ctx.strokeStyle = strokeColor();
+        ctx.lineWidth = lineWidth();
+        ctx.stroke();
+      }
+
+      updateColorFlow();
+    } else if (mode === 'particleTrails') {
+      // Render particle trails
+      const trails = particleTrails();
+
+      // Draw triangles first
+      for (let i = 0; i < tris.length; i++) {
+        const tri = tris[i];
+        const fill = getTriangleColor(tri, i);
+
+        ctx.beginPath();
+        ctx.moveTo(tri.a.x, tri.a.y);
+        ctx.lineTo(tri.b.x, tri.b.y);
+        ctx.lineTo(tri.c.x, tri.c.y);
+        ctx.closePath();
+
+        if (fill) {
+          ctx.fillStyle = fill;
+          ctx.fill();
+        }
+        ctx.strokeStyle = strokeColor();
+        ctx.lineWidth = lineWidth();
+        ctx.stroke();
+      }
+
+      // Draw trails
+      for (let i = 0; i < trails.length; i++) {
+        const pt = trails[i];
+        const hue = (i / trails.length) * 360;
+
+        // Draw trail line
+        if (pt.trail.length > 1) {
+          ctx.beginPath();
+          ctx.moveTo(pt.trail[0].x, pt.trail[0].y);
+
+          for (let j = 1; j < pt.trail.length; j++) {
+            const t = pt.trail[j];
+            ctx.lineTo(t.x, t.y);
+          }
+
+          ctx.strokeStyle = `hsla(${hue}, 80%, 60%, 0.6)`;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+
+        // Draw current point
+        ctx.fillStyle = `hsl(${hue}, 90%, 50%)`;
+        ctx.beginPath();
+        ctx.arc(pt.point.x, pt.point.y, 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      updateParticleTrails();
+    }
+
+    ctx.restore();
+  };
+
+  // Animation loop
+  const startAnimation = () => {
+    if (animationRunning()) return;
+
+    setAnimationRunning(true);
+
+    const mode = animationMode();
+    if (mode === 'colorFlow') {
+      initColorFlow();
+    } else if (mode === 'particleTrails') {
+      initParticleTrails();
+    } else if (mode === 'kaleidoscope') {
+      setKaleidoscopeRotation(0);
+    }
+
+    const animate = () => {
+      if (!animationRunning()) return;
+
+      renderWithAnimation();
+      const id = requestAnimationFrame(animate);
+      setAnimationFrameId(id);
+    };
+
+    animate();
+  };
+
+  const stopAnimation = () => {
+    setAnimationRunning(false);
+    const id = animationFrameId();
+    if (id !== null) {
+      cancelAnimationFrame(id);
+      setAnimationFrameId(null);
+    }
+    render(); // Render static version
   };
 
   // Tutorial controls
@@ -852,6 +1228,67 @@ function App() {
             </div>
           </div>
         </Show>
+
+        <div class="separator" />
+
+        <div class="control-group">
+          <label class="control-label">Animation Mode</label>
+          <Select<AnimationModeOption>
+            value={animationModeOptions.find((opt) => opt.value === animationMode())}
+            onChange={(option) => {
+              if (option) {
+                stopAnimation();
+                setAnimationMode(option.value);
+              }
+            }}
+            options={animationModeOptions}
+            optionValue="value"
+            optionTextValue="label"
+            placeholder="Select animation..."
+            itemComponent={(props) => (
+              <Select.Item item={props.item} class="select__item">
+                <Select.ItemLabel>{props.item.rawValue.label}</Select.ItemLabel>
+                <Select.ItemIndicator class="select__item-indicator">✓</Select.ItemIndicator>
+              </Select.Item>
+            )}
+          >
+            <Select.Trigger class="select__trigger" aria-label="Animation Mode">
+              <Select.Value<AnimationModeOption>>{(state) => state.selectedOption()?.label}</Select.Value>
+              <Select.Icon class="select__icon">▼</Select.Icon>
+            </Select.Trigger>
+            <Select.Portal>
+              <Select.Content class="select__content">
+                <Select.Listbox class="select__listbox" />
+              </Select.Content>
+            </Select.Portal>
+          </Select>
+        </div>
+
+        <Show when={animationMode() !== 'none'}>
+          <div class="animation-controls">
+            <div class="animation-buttons">
+              <Show when={!animationRunning()} fallback={
+                <button class="animation-btn stop" onClick={stopAnimation}>Stop Animation</button>
+              }>
+                <button class="animation-btn start" onClick={startAnimation}>Start Animation</button>
+              </Show>
+            </div>
+
+            <Show when={animationMode() === 'kaleidoscope'}>
+              <div class="control-group">
+                <label class="control-label">Folds: {kaleidoscopeFolds()}</label>
+                <Slider value={[kaleidoscopeFolds()]} onChange={(v) => setKaleidoscopeFolds(v[0])} minValue={2} maxValue={12} step={1} class="slider">
+                  <Slider.Track class="slider__track">
+                    <Slider.Fill class="slider__fill" />
+                    <Slider.Thumb class="slider__thumb"><Slider.Input /></Slider.Thumb>
+                  </Slider.Track>
+                </Slider>
+              </div>
+            </Show>
+          </div>
+        </Show>
+
+        <div class="separator" />
 
         <div class="control-group zoom-controls">
           <label class="control-label">Zoom: {(zoom() * 100).toFixed(0)}%</label>

@@ -585,3 +585,61 @@ html, body, #root {
   background: #e0e0e0;
   margin: 16px 0;
 }
+
+/* Animation Controls */
+.animation-controls {
+  margin-top: 12px;
+  padding: 12px;
+  background: #f0f8ff;
+  border-radius: 8px;
+  border: 1px solid #b8d4e8;
+}
+
+.animation-buttons {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.animation-btn {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s;
+}
+
+.animation-btn:active {
+  transform: scale(0.97);
+}
+
+.animation-btn.start {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.animation-btn.start:hover {
+  background: linear-gradient(135deg, #5a67d8 0%, #6b46a3 100%);
+}
+
+.animation-btn.stop {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  color: white;
+}
+
+.animation-btn.stop:hover {
+  background: linear-gradient(135deg, #e879f9 0%, #f43f5e 100%);
+}
+
+.animation-info {
+  margin-top: 8px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 4px;
+  font-size: 12px;
+  color: #555;
+  line-height: 1.4;
+}
