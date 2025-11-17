@@ -13,10 +13,27 @@ export class BowyerWatson {
   /**
    * Perform Delaunay triangulation on a set of points
    * @param {Point[]} points - The points to triangulate
-   * @param {Triangle} superTriangle - A triangle that contains all points
+   * @param {Triangle|number} superTriangleOrWidth - Either a super triangle or canvas width
+   * @param {number} [height] - Canvas height (only if second param is width)
    * @returns {Triangle[]} Array of triangles forming the Delaunay triangulation
    */
-  static triangulate(points, superTriangle) {
+  static triangulate(points, superTriangleOrWidth, height) {
+    // Support both calling patterns:
+    // 1. triangulate(points, superTriangle) - original
+    // 2. triangulate(points, width, height) - convenience method
+    let superTriangle;
+
+    if (typeof superTriangleOrWidth === 'number') {
+      // Called with width and height - create super triangle
+      if (height === undefined) {
+        throw new Error('Height must be provided when calling with width');
+      }
+      superTriangle = this.createSuperTriangle(points, superTriangleOrWidth, height);
+    } else {
+      // Called with explicit super triangle
+      superTriangle = superTriangleOrWidth;
+    }
+
     const triangulation = [superTriangle];
 
     // Add each point incrementally
@@ -127,16 +144,35 @@ export class BowyerWatson {
   }
 
   /**
-   * Create a super triangle that contains all given points
-   * The super triangle should be large enough to encompass all points
+   * Create a super triangle that contains all given points or fills a canvas
    * @param {Point[]} points - The points to contain
-   * @param {number} margin - Extra margin multiplier (default: 2)
+   * @param {number} widthOrMargin - Either canvas width or margin multiplier (default: 2)
+   * @param {number} [height] - Canvas height (only if widthOrMargin is width)
    * @returns {Triangle} A super triangle
    */
-  static createSuperTriangle(points, margin = 2) {
+  static createSuperTriangle(points, widthOrMargin = 2, height) {
     if (points.length === 0) {
       throw new Error('Cannot create super triangle for empty point set');
     }
+
+    // Support both calling patterns:
+    // 1. createSuperTriangle(points, margin) - original
+    // 2. createSuperTriangle(points, width, height) - for canvas dimensions
+    if (height !== undefined) {
+      // Called with width and height - create super triangle for canvas
+      const width = widthOrMargin;
+      const margin = Math.max(width, height);
+
+      const Point = points[0].constructor;
+      return new Triangle(
+        new Point(-margin, -margin),
+        new Point(width + margin * 2, -margin),
+        new Point(width / 2, height + margin * 2)
+      );
+    }
+
+    // Original behavior - use margin multiplier
+    const margin = widthOrMargin;
 
     // Find bounding box
     let minX = points[0].x;
@@ -151,13 +187,13 @@ export class BowyerWatson {
       maxY = Math.max(maxY, point.y);
     }
 
-    const width = maxX - minX;
-    const height = maxY - minY;
+    const boxWidth = maxX - minX;
+    const boxHeight = maxY - minY;
     const centerX = (minX + maxX) / 2;
     const centerY = (minY + maxY) / 2;
 
     // Create a triangle large enough to contain the bounding box
-    const size = Math.max(width, height) * margin;
+    const size = Math.max(boxWidth, boxHeight) * margin;
 
     const Point = points[0].constructor;
     return new Triangle(
