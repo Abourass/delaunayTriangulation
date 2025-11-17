@@ -1,6 +1,7 @@
 import { createSignal, createEffect, onMount, onCleanup, Show, batch } from 'solid-js';
 import { Select } from '@kobalte/core/select';
 import { Slider } from '@kobalte/core/slider';
+import { Collapsible } from '@kobalte/core/collapsible';
 import { Point, Triangle, Edge } from './core/index.mjs';
 import { BowyerWatson } from './algorithms/BowyerWatson.mjs';
 import { CanvasRenderer } from './rendering/CanvasRenderer.mjs';
@@ -35,6 +36,24 @@ interface PointTrail {
   velocity: { x: number; y: number };
 }
 
+interface EdgeFlipState {
+  edges: { edge: Edge; isIllegal: boolean; flipProgress: number }[];
+  currentEdgeIndex: number;
+  phase: 'checking' | 'flipping' | 'done';
+}
+
+interface CircumcircleSweepState {
+  currentTriangleIndex: number;
+  circleProgress: number;
+  testedTriangles: Set<number>;
+}
+
+interface VoronoiGrowthState {
+  cellRadii: Map<number, number>;
+  maxRadius: number;
+  growthSpeed: number;
+}
+
 interface AlgorithmStep {
   type: 'add_point' | 'find_bad' | 'find_boundary' | 'remove_bad' | 'retriangulate' | 'cleanup';
   description: string;
@@ -66,6 +85,9 @@ const animationModeOptions: AnimationModeOption[] = [
   { value: 'particleTrails', label: 'Particle Trails', description: 'Points move with trailing history' },
   { value: 'kaleidoscope', label: 'Kaleidoscope', description: 'Mirror/rotate for symmetric patterns' },
   { value: 'psychedelic', label: 'Psychedelic', description: 'Colorful rotating kaleidoscope' },
+  { value: 'edgeFlip', label: 'Edge Flip', description: 'Visualize Delaunay edge flipping for illegal edges' },
+  { value: 'circumcircleSweep', label: 'Circumcircle Sweep', description: 'Show each circumcircle test as it happens' },
+  { value: 'voronoiGrowth', label: 'Voronoi Growth', description: 'Cells expand outward from generating points' },
 ];
 
 function App() {
@@ -111,6 +133,17 @@ function App() {
   const [kaleidoscopeFolds, setKaleidoscopeFolds] = createSignal(6);
   const [kaleidoscopeRotation, setKaleidoscopeRotation] = createSignal(0);
   const [animationFrameId, setAnimationFrameId] = createSignal<number | null>(null);
+
+  // Algorithm-focused animation states
+  const [edgeFlipState, setEdgeFlipState] = createSignal<EdgeFlipState | null>(null);
+  const [circumcircleSweepState, setCircumcircleSweepState] = createSignal<CircumcircleSweepState | null>(null);
+  const [voronoiGrowthState, setVoronoiGrowthState] = createSignal<VoronoiGrowthState | null>(null);
+
+  // Collapsible section states
+  const [generatorSectionOpen, setGeneratorSectionOpen] = createSignal(true);
+  const [visualizationSectionOpen, setVisualizationSectionOpen] = createSignal(true);
+  const [animationSectionOpen, setAnimationSectionOpen] = createSignal(true);
+  const [exportSectionOpen, setExportSectionOpen] = createSignal(false);
 
   const getGenerator = () => {
     switch (selectedGenerator()) {
@@ -644,6 +677,168 @@ function App() {
     }
   };
 
+  // Initialize edge flip animation
+  const initEdgeFlip = () => {
+    const tris = triangles();
+    if (tris.length === 0) return;
+
+    // Collect all unique edges and check if they are "illegal" (for demonstration)
+    const edgeMap = new Map<string, { edge: Edge; triangles: Triangle[] }>();
+
+    for (const tri of tris) {
+      for (const edge of tri.getEdges()) {
+        const key = edge.p1.x < edge.p2.x || (edge.p1.x === edge.p2.x && edge.p1.y < edge.p2.y)
+          ? `${edge.p1.x},${edge.p1.y}-${edge.p2.x},${edge.p2.y}`
+          : `${edge.p2.x},${edge.p2.y}-${edge.p1.x},${edge.p1.y}`;
+
+        if (!edgeMap.has(key)) {
+          edgeMap.set(key, { edge, triangles: [] });
+        }
+        edgeMap.get(key)!.triangles.push(tri);
+      }
+    }
+
+    // Find edges shared by two triangles and mark some as "illegal" for visualization
+    const edges: { edge: Edge; isIllegal: boolean; flipProgress: number }[] = [];
+
+    for (const [, data] of edgeMap) {
+      if (data.triangles.length === 2) {
+        // Check Delaunay condition - if either triangle's circumcircle contains the opposite point
+        const [t1, t2] = data.triangles;
+        const oppositeInT1 = [t1.a, t1.b, t1.c].find(
+          p => !p.equals(data.edge.p1) && !p.equals(data.edge.p2)
+        );
+        const oppositeInT2 = [t2.a, t2.b, t2.c].find(
+          p => !p.equals(data.edge.p1) && !p.equals(data.edge.p2)
+        );
+
+        // Simulate some edges being illegal for demonstration
+        const isIllegal = oppositeInT1 && oppositeInT2 && Math.random() < 0.15;
+        edges.push({ edge: data.edge, isIllegal: !!isIllegal, flipProgress: 0 });
+      }
+    }
+
+    setEdgeFlipState({
+      edges,
+      currentEdgeIndex: 0,
+      phase: 'checking',
+    });
+  };
+
+  // Update edge flip animation
+  const updateEdgeFlip = () => {
+    const state = edgeFlipState();
+    if (!state) return;
+
+    const newState = { ...state };
+
+    if (state.phase === 'checking') {
+      // Advance through edges, checking each one
+      if (state.currentEdgeIndex < state.edges.length - 1) {
+        newState.currentEdgeIndex = state.currentEdgeIndex + 1;
+        if (newState.edges[newState.currentEdgeIndex].isIllegal) {
+          newState.phase = 'flipping';
+        }
+      } else {
+        // Reset to beginning for continuous animation
+        newState.currentEdgeIndex = 0;
+        newState.edges = newState.edges.map(e => ({ ...e, flipProgress: 0, isIllegal: Math.random() < 0.15 }));
+      }
+    } else if (state.phase === 'flipping') {
+      const edge = newState.edges[state.currentEdgeIndex];
+      edge.flipProgress += 0.05;
+      if (edge.flipProgress >= 1) {
+        edge.flipProgress = 1;
+        edge.isIllegal = false;
+        newState.phase = 'checking';
+      }
+    }
+
+    setEdgeFlipState(newState);
+  };
+
+  // Initialize circumcircle sweep animation
+  const initCircumcircleSweep = () => {
+    setCircumcircleSweepState({
+      currentTriangleIndex: 0,
+      circleProgress: 0,
+      testedTriangles: new Set(),
+    });
+  };
+
+  // Update circumcircle sweep animation
+  const updateCircumcircleSweep = () => {
+    const state = circumcircleSweepState();
+    const tris = triangles();
+    if (!state || tris.length === 0) return;
+
+    const newState = { ...state, testedTriangles: new Set(state.testedTriangles) };
+
+    // Animate circle growing
+    newState.circleProgress += 0.03;
+
+    if (newState.circleProgress >= 1) {
+      newState.testedTriangles.add(state.currentTriangleIndex);
+      newState.circleProgress = 0;
+      newState.currentTriangleIndex = (state.currentTriangleIndex + 1) % tris.length;
+
+      // Reset after all triangles tested
+      if (newState.currentTriangleIndex === 0) {
+        newState.testedTriangles.clear();
+      }
+    }
+
+    setCircumcircleSweepState(newState);
+  };
+
+  // Initialize Voronoi growth animation
+  const initVoronoiGrowth = () => {
+    const pts = points();
+    const cellRadii = new Map<number, number>();
+
+    for (let i = 0; i < pts.length; i++) {
+      cellRadii.set(i, 0);
+    }
+
+    // Calculate max radius based on canvas size
+    const { width, height } = dimensions();
+    const maxRadius = Math.sqrt(width * width + height * height) / 2;
+
+    setVoronoiGrowthState({
+      cellRadii,
+      maxRadius,
+      growthSpeed: 2,
+    });
+  };
+
+  // Update Voronoi growth animation
+  const updateVoronoiGrowth = () => {
+    const state = voronoiGrowthState();
+    if (!state) return;
+
+    const newRadii = new Map(state.cellRadii);
+    let anyGrowing = false;
+
+    for (const [i, radius] of newRadii) {
+      if (radius < state.maxRadius) {
+        newRadii.set(i, Math.min(radius + state.growthSpeed, state.maxRadius));
+        anyGrowing = true;
+      }
+    }
+
+    // Reset when all cells are fully grown
+    if (!anyGrowing) {
+      for (const [i] of newRadii) {
+        newRadii.set(i, 0);
+      }
+    }
+
+    setVoronoiGrowthState({
+      ...state,
+      cellRadii: newRadii,
+    });
+  };
+
   // Render with animations
   const renderWithAnimation = () => {
     if (!canvasRef) return;
@@ -836,6 +1031,236 @@ function App() {
       }
 
       setKaleidoscopeRotation(rotation + 0.008);
+    } else if (mode === 'edgeFlip') {
+      // Render edge flip visualization
+      const state = edgeFlipState();
+
+      // Draw all triangles first
+      for (let i = 0; i < tris.length; i++) {
+        const tri = tris[i];
+        const fill = getTriangleColor(tri, i);
+
+        ctx.beginPath();
+        ctx.moveTo(tri.a.x, tri.a.y);
+        ctx.lineTo(tri.b.x, tri.b.y);
+        ctx.lineTo(tri.c.x, tri.c.y);
+        ctx.closePath();
+
+        if (fill) {
+          ctx.fillStyle = fill;
+          ctx.fill();
+        }
+        ctx.strokeStyle = strokeColor();
+        ctx.lineWidth = lineWidth();
+        ctx.stroke();
+      }
+
+      // Draw edges with highlight for current and illegal ones
+      if (state) {
+        for (let i = 0; i < state.edges.length; i++) {
+          const edgeData = state.edges[i];
+          const isCurrent = i === state.currentEdgeIndex;
+
+          if (isCurrent || edgeData.isIllegal) {
+            ctx.beginPath();
+            ctx.moveTo(edgeData.edge.p1.x, edgeData.edge.p1.y);
+            ctx.lineTo(edgeData.edge.p2.x, edgeData.edge.p2.y);
+
+            if (edgeData.isIllegal) {
+              // Illegal edge - red and pulsing
+              const pulse = Math.sin(edgeData.flipProgress * Math.PI);
+              ctx.strokeStyle = `rgba(231, 76, 60, ${0.8 + pulse * 0.2})`;
+              ctx.lineWidth = lineWidth() * 3 + pulse * 2;
+
+              // Draw flip animation - show the edge rotating
+              if (edgeData.flipProgress > 0) {
+                const midX = (edgeData.edge.p1.x + edgeData.edge.p2.x) / 2;
+                const midY = (edgeData.edge.p1.y + edgeData.edge.p2.y) / 2;
+                const angle = edgeData.flipProgress * Math.PI / 2;
+
+                ctx.save();
+                ctx.translate(midX, midY);
+                ctx.rotate(angle);
+                ctx.translate(-midX, -midY);
+                ctx.stroke();
+                ctx.restore();
+              } else {
+                ctx.stroke();
+              }
+            } else if (isCurrent) {
+              // Currently checking - yellow highlight
+              ctx.strokeStyle = '#f39c12';
+              ctx.lineWidth = lineWidth() * 2;
+              ctx.stroke();
+            }
+          }
+        }
+
+        // Draw indicator text
+        ctx.fillStyle = '#2c3e50';
+        ctx.font = '14px monospace';
+        ctx.fillText(
+          `Checking edge ${state.currentEdgeIndex + 1}/${state.edges.length} - ${state.phase}`,
+          10,
+          height - 10
+        );
+      }
+
+      updateEdgeFlip();
+    } else if (mode === 'circumcircleSweep') {
+      // Render circumcircle sweep visualization
+      const state = circumcircleSweepState();
+
+      // Draw all triangles
+      for (let i = 0; i < tris.length; i++) {
+        const tri = tris[i];
+        const isCurrent = state && i === state.currentTriangleIndex;
+        const isTested = state && state.testedTriangles.has(i);
+
+        ctx.beginPath();
+        ctx.moveTo(tri.a.x, tri.a.y);
+        ctx.lineTo(tri.b.x, tri.b.y);
+        ctx.lineTo(tri.c.x, tri.c.y);
+        ctx.closePath();
+
+        if (isCurrent) {
+          ctx.fillStyle = 'rgba(52, 152, 219, 0.3)';
+          ctx.fill();
+          ctx.strokeStyle = '#3498db';
+          ctx.lineWidth = lineWidth() * 2;
+        } else if (isTested) {
+          ctx.fillStyle = 'rgba(46, 204, 113, 0.2)';
+          ctx.fill();
+          ctx.strokeStyle = '#27ae60';
+          ctx.lineWidth = lineWidth();
+        } else {
+          ctx.strokeStyle = strokeColor();
+          ctx.lineWidth = lineWidth();
+        }
+        ctx.stroke();
+      }
+
+      // Draw circumcircles
+      if (state) {
+        // Draw completed circumcircles
+        for (const idx of state.testedTriangles) {
+          const tri = tris[idx];
+          if (tri) {
+            const center = tri.getCircumcenter();
+            const radius = tri.getCircumradius();
+
+            ctx.strokeStyle = 'rgba(46, 204, 113, 0.4)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        }
+
+        // Draw current circumcircle with animation
+        const currentTri = tris[state.currentTriangleIndex];
+        if (currentTri) {
+          const center = currentTri.getCircumcenter();
+          const fullRadius = currentTri.getCircumradius();
+          const currentRadius = fullRadius * state.circleProgress;
+
+          // Animated growing circle
+          ctx.strokeStyle = 'rgba(52, 152, 219, 0.8)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(center.x, center.y, currentRadius, 0, Math.PI * 2);
+          ctx.stroke();
+
+          // Draw center point
+          ctx.fillStyle = '#e74c3c';
+          ctx.beginPath();
+          ctx.arc(center.x, center.y, 4, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Draw indicator
+          ctx.fillStyle = '#2c3e50';
+          ctx.font = '14px monospace';
+          ctx.fillText(
+            `Testing triangle ${state.currentTriangleIndex + 1}/${tris.length}`,
+            10,
+            height - 10
+          );
+        }
+      }
+
+      updateCircumcircleSweep();
+    } else if (mode === 'voronoiGrowth') {
+      // Render Voronoi growth visualization
+      const state = voronoiGrowthState();
+      const pts = points();
+
+      // Draw triangulation as background
+      ctx.globalAlpha = 0.3;
+      for (let i = 0; i < tris.length; i++) {
+        const tri = tris[i];
+
+        ctx.beginPath();
+        ctx.moveTo(tri.a.x, tri.a.y);
+        ctx.lineTo(tri.b.x, tri.b.y);
+        ctx.lineTo(tri.c.x, tri.c.y);
+        ctx.closePath();
+        ctx.strokeStyle = strokeColor();
+        ctx.lineWidth = lineWidth() * 0.5;
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+
+      // Draw growing Voronoi cells as circles
+      if (state) {
+        for (let i = 0; i < pts.length; i++) {
+          const p = pts[i];
+          const radius = state.cellRadii.get(i) || 0;
+
+          if (radius > 0) {
+            // Draw filled circle representing cell growth
+            const hue = (i / pts.length) * 360;
+            ctx.fillStyle = `hsla(${hue}, 70%, 60%, 0.3)`;
+            ctx.strokeStyle = `hsla(${hue}, 80%, 50%, 0.8)`;
+            ctx.lineWidth = 2;
+
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+          }
+
+          // Draw point
+          ctx.fillStyle = '#2c3e50';
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Draw actual Voronoi edges where they should be
+        const voronoiEdges = computeVoronoiEdges();
+        ctx.strokeStyle = 'rgba(231, 76, 60, 0.6)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        for (const edge of voronoiEdges) {
+          ctx.beginPath();
+          ctx.moveTo(edge.p1.x, edge.p1.y);
+          ctx.lineTo(edge.p2.x, edge.p2.y);
+          ctx.stroke();
+        }
+        ctx.setLineDash([]);
+
+        // Draw indicator
+        ctx.fillStyle = '#2c3e50';
+        ctx.font = '14px monospace';
+        const avgRadius = Array.from(state.cellRadii.values()).reduce((a, b) => a + b, 0) / pts.length;
+        ctx.fillText(
+          `Cell radius: ${avgRadius.toFixed(0)}px`,
+          10,
+          height - 10
+        );
+      }
+
+      updateVoronoiGrowth();
     }
 
     ctx.restore();
@@ -854,6 +1279,12 @@ function App() {
       initParticleTrails();
     } else if (mode === 'kaleidoscope' || mode === 'psychedelic') {
       setKaleidoscopeRotation(0);
+    } else if (mode === 'edgeFlip') {
+      initEdgeFlip();
+    } else if (mode === 'circumcircleSweep') {
+      initCircumcircleSweep();
+    } else if (mode === 'voronoiGrowth') {
+      initVoronoiGrowth();
     }
 
     const animate = () => {
@@ -1154,204 +1585,52 @@ function App() {
       <div class="controls">
         <h2>Delaunay Triangulation</h2>
 
-        <div class="control-group">
-          <label class="control-label">Point Generator</label>
-          <Select<GeneratorOption>
-            value={generatorOptions.find((opt) => opt.value === selectedGenerator())}
-            onChange={(option) => {
-              if (option) {
-                setSelectedGenerator(option.value);
-                if (option.value === 'interactive') {
-                  clearInteractivePoints();
-                }
-              }
-            }}
-            options={generatorOptions}
-            optionValue="value"
-            optionTextValue="label"
-            placeholder="Select generator..."
-            itemComponent={(props) => (
-              <Select.Item item={props.item} class="select__item">
-                <Select.ItemLabel>{props.item.rawValue.label}</Select.ItemLabel>
-                <Select.ItemIndicator class="select__item-indicator">✓</Select.ItemIndicator>
-              </Select.Item>
-            )}
-          >
-            <Select.Trigger class="select__trigger" aria-label="Generator">
-              <Select.Value<GeneratorOption>>{(state) => state.selectedOption()?.label}</Select.Value>
-              <Select.Icon class="select__icon">▼</Select.Icon>
-            </Select.Trigger>
-            <Select.Portal>
-              <Select.Content class="select__content">
-                <Select.Listbox class="select__listbox" />
-              </Select.Content>
-            </Select.Portal>
-          </Select>
-        </div>
-
-        <Show when={selectedGenerator() !== 'interactive'}>
-          <div class="control-group">
-            <label class="control-label">Point Count: {pointCount()}</label>
-            <Slider value={[pointCount()]} onChange={(v) => setPointCount(v[0])} minValue={10} maxValue={200} step={5} class="slider">
-              <Slider.Track class="slider__track">
-                <Slider.Fill class="slider__fill" />
-                <Slider.Thumb class="slider__thumb"><Slider.Input /></Slider.Thumb>
-              </Slider.Track>
-            </Slider>
-          </div>
-        </Show>
-
-        <Show when={selectedGenerator() === 'interactive'}>
-          <div class="control-group">
-            <button class="secondary-btn" onClick={clearInteractivePoints}>Clear Points</button>
-          </div>
-        </Show>
-
-        <div class="control-group">
-          <label class="control-label">Line Width: {lineWidth()}px</label>
-          <Slider value={[lineWidth()]} onChange={(v) => setLineWidth(v[0])} minValue={1} maxValue={10} step={0.5} class="slider">
-            <Slider.Track class="slider__track">
-              <Slider.Fill class="slider__fill" />
-              <Slider.Thumb class="slider__thumb"><Slider.Input /></Slider.Thumb>
-            </Slider.Track>
-          </Slider>
-        </div>
-
-        <div class="control-group color-pickers">
-          <div class="color-picker-item">
-            <label class="control-label">Stroke</label>
-            <input type="color" value={strokeColor()} onInput={(e) => setStrokeColor(e.currentTarget.value)} />
-          </div>
-          <div class="color-picker-item">
-            <label class="control-label">Background</label>
-            <input type="color" value={backgroundColor()} onInput={(e) => setBackgroundColor(e.currentTarget.value)} />
-          </div>
-        </div>
-
-        <div class="control-group">
-          <label class="control-label">Triangle Coloring</label>
-          <Select<ColorModeOption>
-            value={colorModeOptions.find((opt) => opt.value === colorMode())}
-            onChange={(option) => option && setColorMode(option.value)}
-            options={colorModeOptions}
-            optionValue="value"
-            optionTextValue="label"
-            placeholder="Select color mode..."
-            itemComponent={(props) => (
-              <Select.Item item={props.item} class="select__item">
-                <Select.ItemLabel>{props.item.rawValue.label}</Select.ItemLabel>
-                <Select.ItemIndicator class="select__item-indicator">✓</Select.ItemIndicator>
-              </Select.Item>
-            )}
-          >
-            <Select.Trigger class="select__trigger" aria-label="Color Mode">
-              <Select.Value<ColorModeOption>>{(state) => state.selectedOption()?.label}</Select.Value>
-              <Select.Icon class="select__icon">▼</Select.Icon>
-            </Select.Trigger>
-            <Select.Portal>
-              <Select.Content class="select__content">
-                <Select.Listbox class="select__listbox" />
-              </Select.Content>
-            </Select.Portal>
-          </Select>
-        </div>
-
-        <div class="control-group checkboxes">
-          <label class="checkbox-label">
-            <input type="checkbox" checked={showCircumcircles()} onChange={(e) => setShowCircumcircles(e.currentTarget.checked)} />
-            Show Circumcircles
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" checked={showVoronoi()} onChange={(e) => setShowVoronoi(e.currentTarget.checked)} />
-            Show Voronoi Diagram
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" checked={showPoints()} onChange={(e) => setShowPoints(e.currentTarget.checked)} />
-            Show Points
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" checked={tutorialMode()} onChange={(e) => { setTutorialMode(e.currentTarget.checked); generateTriangulation(); }} />
-            Tutorial Mode
-          </label>
-        </div>
-
-        <Show when={tutorialMode() && algorithmSteps().length > 0}>
-          <div class="tutorial-panel">
-            <div class="tutorial-info">
-              Step {currentStep() + 1} / {algorithmSteps().length}
-            </div>
-            <div class="tutorial-description">
-              {algorithmSteps()[currentStep()]?.description}
-            </div>
-            <div class="tutorial-controls">
-              <button class="tutorial-btn" onClick={resetTutorial}>⏮</button>
-              <button class="tutorial-btn" onClick={stepBackward} disabled={currentStep() === 0}>◀</button>
-              <Show when={!isPlaying()} fallback={<button class="tutorial-btn" onClick={pauseTutorial}>⏸</button>}>
-                <button class="tutorial-btn" onClick={playTutorial}>▶</button>
-              </Show>
-              <button class="tutorial-btn" onClick={stepForward} disabled={currentStep() >= algorithmSteps().length - 1}>▶</button>
-            </div>
+        {/* Generator Section */}
+        <Collapsible open={generatorSectionOpen()} onOpenChange={setGeneratorSectionOpen} class="collapsible">
+          <Collapsible.Trigger class="collapsible__trigger">
+            <span class="collapsible__title">Point Generation</span>
+            <span class="collapsible__icon">{generatorSectionOpen() ? '▼' : '▶'}</span>
+          </Collapsible.Trigger>
+          <Collapsible.Content class="collapsible__content">
             <div class="control-group">
-              <label class="control-label">Speed: {playSpeed()}ms</label>
-              <Slider value={[playSpeed()]} onChange={(v) => setPlaySpeed(v[0])} minValue={100} maxValue={3000} step={100} class="slider">
-                <Slider.Track class="slider__track">
-                  <Slider.Fill class="slider__fill" />
-                  <Slider.Thumb class="slider__thumb"><Slider.Input /></Slider.Thumb>
-                </Slider.Track>
-              </Slider>
-            </div>
-          </div>
-        </Show>
-
-        <div class="separator" />
-
-        <div class="control-group">
-          <label class="control-label">Animation Mode</label>
-          <Select<AnimationModeOption>
-            value={animationModeOptions.find((opt) => opt.value === animationMode())}
-            onChange={(option) => {
-              if (option) {
-                stopAnimation();
-                setAnimationMode(option.value);
-              }
-            }}
-            options={animationModeOptions}
-            optionValue="value"
-            optionTextValue="label"
-            placeholder="Select animation..."
-            itemComponent={(props) => (
-              <Select.Item item={props.item} class="select__item">
-                <Select.ItemLabel>{props.item.rawValue.label}</Select.ItemLabel>
-                <Select.ItemIndicator class="select__item-indicator">✓</Select.ItemIndicator>
-              </Select.Item>
-            )}
-          >
-            <Select.Trigger class="select__trigger" aria-label="Animation Mode">
-              <Select.Value<AnimationModeOption>>{(state) => state.selectedOption()?.label}</Select.Value>
-              <Select.Icon class="select__icon">▼</Select.Icon>
-            </Select.Trigger>
-            <Select.Portal>
-              <Select.Content class="select__content">
-                <Select.Listbox class="select__listbox" />
-              </Select.Content>
-            </Select.Portal>
-          </Select>
-        </div>
-
-        <Show when={animationMode() !== 'none'}>
-          <div class="animation-controls">
-            <div class="animation-buttons">
-              <Show when={!animationRunning()} fallback={
-                <button class="animation-btn stop" onClick={stopAnimation}>Stop Animation</button>
-              }>
-                <button class="animation-btn start" onClick={startAnimation}>Start Animation</button>
-              </Show>
+              <label class="control-label">Generator Type</label>
+              <Select<GeneratorOption>
+                value={generatorOptions.find((opt) => opt.value === selectedGenerator())}
+                onChange={(option) => {
+                  if (option) {
+                    setSelectedGenerator(option.value);
+                    if (option.value === 'interactive') {
+                      clearInteractivePoints();
+                    }
+                  }
+                }}
+                options={generatorOptions}
+                optionValue="value"
+                optionTextValue="label"
+                placeholder="Select generator..."
+                itemComponent={(props) => (
+                  <Select.Item item={props.item} class="select__item">
+                    <Select.ItemLabel>{props.item.rawValue.label}</Select.ItemLabel>
+                    <Select.ItemIndicator class="select__item-indicator">✓</Select.ItemIndicator>
+                  </Select.Item>
+                )}
+              >
+                <Select.Trigger class="select__trigger" aria-label="Generator">
+                  <Select.Value<GeneratorOption>>{(state) => state.selectedOption()?.label}</Select.Value>
+                  <Select.Icon class="select__icon">▼</Select.Icon>
+                </Select.Trigger>
+                <Select.Portal>
+                  <Select.Content class="select__content">
+                    <Select.Listbox class="select__listbox" />
+                  </Select.Content>
+                </Select.Portal>
+              </Select>
             </div>
 
-            <Show when={animationMode() === 'kaleidoscope' || animationMode() === 'psychedelic'}>
+            <Show when={selectedGenerator() !== 'interactive'}>
               <div class="control-group">
-                <label class="control-label">Folds: {kaleidoscopeFolds()}</label>
-                <Slider value={[kaleidoscopeFolds()]} onChange={(v) => setKaleidoscopeFolds(v[0])} minValue={2} maxValue={12} step={1} class="slider">
+                <label class="control-label">Point Count: {pointCount()}</label>
+                <Slider value={[pointCount()]} onChange={(v) => setPointCount(v[0])} minValue={10} maxValue={200} step={5} class="slider">
                   <Slider.Track class="slider__track">
                     <Slider.Fill class="slider__fill" />
                     <Slider.Thumb class="slider__thumb"><Slider.Input /></Slider.Thumb>
@@ -1359,33 +1638,221 @@ function App() {
                 </Slider>
               </div>
             </Show>
-          </div>
-        </Show>
 
-        <div class="separator" />
+            <Show when={selectedGenerator() === 'interactive'}>
+              <div class="control-group">
+                <button class="secondary-btn" onClick={clearInteractivePoints}>Clear Points</button>
+              </div>
+            </Show>
 
-        <div class="control-group zoom-controls">
-          <label class="control-label">Zoom: {(zoom() * 100).toFixed(0)}%</label>
-          <div class="zoom-buttons">
-            <button class="zoom-btn" onClick={() => setZoom(Math.min(10, zoom() * 1.2))}>+</button>
-            <button class="zoom-btn" onClick={() => setZoom(Math.max(0.1, zoom() / 1.2))}>-</button>
-            <button class="zoom-btn" onClick={resetZoomPan}>Reset</button>
-          </div>
-        </div>
+            <div class="control-group">
+              <button class="regenerate-btn" onClick={generateTriangulation}>Regenerate</button>
+            </div>
+          </Collapsible.Content>
+        </Collapsible>
 
-        <div class="control-group">
-          <button class="regenerate-btn" onClick={generateTriangulation}>Regenerate</button>
-        </div>
+        {/* Visualization Section */}
+        <Collapsible open={visualizationSectionOpen()} onOpenChange={setVisualizationSectionOpen} class="collapsible">
+          <Collapsible.Trigger class="collapsible__trigger">
+            <span class="collapsible__title">Visualization</span>
+            <span class="collapsible__icon">{visualizationSectionOpen() ? '▼' : '▶'}</span>
+          </Collapsible.Trigger>
+          <Collapsible.Content class="collapsible__content">
+            <div class="control-group">
+              <label class="control-label">Line Width: {lineWidth()}px</label>
+              <Slider value={[lineWidth()]} onChange={(v) => setLineWidth(v[0])} minValue={1} maxValue={10} step={0.5} class="slider">
+                <Slider.Track class="slider__track">
+                  <Slider.Fill class="slider__fill" />
+                  <Slider.Thumb class="slider__thumb"><Slider.Input /></Slider.Thumb>
+                </Slider.Track>
+              </Slider>
+            </div>
 
-        <div class="control-group export-buttons">
-          <button class="export-btn" onClick={exportAsSVG}>Export SVG</button>
-          <button class="export-btn" onClick={exportAsJSON}>Export JSON</button>
-        </div>
+            <div class="control-group color-pickers">
+              <div class="color-picker-item">
+                <label class="control-label">Stroke</label>
+                <input type="color" value={strokeColor()} onInput={(e) => setStrokeColor(e.currentTarget.value)} />
+              </div>
+              <div class="color-picker-item">
+                <label class="control-label">Background</label>
+                <input type="color" value={backgroundColor()} onInput={(e) => setBackgroundColor(e.currentTarget.value)} />
+              </div>
+            </div>
 
-        <div class="control-group config-buttons">
-          <button class="config-btn" onClick={saveConfiguration}>Save Config</button>
-          <button class="config-btn" onClick={loadConfiguration}>Load Config</button>
-        </div>
+            <div class="control-group">
+              <label class="control-label">Triangle Coloring</label>
+              <Select<ColorModeOption>
+                value={colorModeOptions.find((opt) => opt.value === colorMode())}
+                onChange={(option) => option && setColorMode(option.value)}
+                options={colorModeOptions}
+                optionValue="value"
+                optionTextValue="label"
+                placeholder="Select color mode..."
+                itemComponent={(props) => (
+                  <Select.Item item={props.item} class="select__item">
+                    <Select.ItemLabel>{props.item.rawValue.label}</Select.ItemLabel>
+                    <Select.ItemIndicator class="select__item-indicator">✓</Select.ItemIndicator>
+                  </Select.Item>
+                )}
+              >
+                <Select.Trigger class="select__trigger" aria-label="Color Mode">
+                  <Select.Value<ColorModeOption>>{(state) => state.selectedOption()?.label}</Select.Value>
+                  <Select.Icon class="select__icon">▼</Select.Icon>
+                </Select.Trigger>
+                <Select.Portal>
+                  <Select.Content class="select__content">
+                    <Select.Listbox class="select__listbox" />
+                  </Select.Content>
+                </Select.Portal>
+              </Select>
+            </div>
+
+            <div class="control-group checkboxes">
+              <label class="checkbox-label">
+                <input type="checkbox" checked={showCircumcircles()} onChange={(e) => setShowCircumcircles(e.currentTarget.checked)} />
+                Show Circumcircles
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" checked={showVoronoi()} onChange={(e) => setShowVoronoi(e.currentTarget.checked)} />
+                Show Voronoi Diagram
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" checked={showPoints()} onChange={(e) => setShowPoints(e.currentTarget.checked)} />
+                Show Points
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" checked={tutorialMode()} onChange={(e) => { setTutorialMode(e.currentTarget.checked); generateTriangulation(); }} />
+                Tutorial Mode
+              </label>
+            </div>
+
+            <Show when={tutorialMode() && algorithmSteps().length > 0}>
+              <div class="tutorial-panel">
+                <div class="tutorial-info">
+                  Step {currentStep() + 1} / {algorithmSteps().length}
+                </div>
+                <div class="tutorial-description">
+                  {algorithmSteps()[currentStep()]?.description}
+                </div>
+                <div class="tutorial-controls">
+                  <button class="tutorial-btn" onClick={resetTutorial}>⏮</button>
+                  <button class="tutorial-btn" onClick={stepBackward} disabled={currentStep() === 0}>◀</button>
+                  <Show when={!isPlaying()} fallback={<button class="tutorial-btn" onClick={pauseTutorial}>⏸</button>}>
+                    <button class="tutorial-btn" onClick={playTutorial}>▶</button>
+                  </Show>
+                  <button class="tutorial-btn" onClick={stepForward} disabled={currentStep() >= algorithmSteps().length - 1}>▶</button>
+                </div>
+                <div class="control-group">
+                  <label class="control-label">Speed: {playSpeed()}ms</label>
+                  <Slider value={[playSpeed()]} onChange={(v) => setPlaySpeed(v[0])} minValue={100} maxValue={3000} step={100} class="slider">
+                    <Slider.Track class="slider__track">
+                      <Slider.Fill class="slider__fill" />
+                      <Slider.Thumb class="slider__thumb"><Slider.Input /></Slider.Thumb>
+                    </Slider.Track>
+                  </Slider>
+                </div>
+              </div>
+            </Show>
+
+            <div class="control-group zoom-controls">
+              <label class="control-label">Zoom: {(zoom() * 100).toFixed(0)}%</label>
+              <div class="zoom-buttons">
+                <button class="zoom-btn" onClick={() => setZoom(Math.min(10, zoom() * 1.2))}>+</button>
+                <button class="zoom-btn" onClick={() => setZoom(Math.max(0.1, zoom() / 1.2))}>-</button>
+                <button class="zoom-btn" onClick={resetZoomPan}>Reset</button>
+              </div>
+            </div>
+          </Collapsible.Content>
+        </Collapsible>
+
+        {/* Animation Section */}
+        <Collapsible open={animationSectionOpen()} onOpenChange={setAnimationSectionOpen} class="collapsible">
+          <Collapsible.Trigger class="collapsible__trigger">
+            <span class="collapsible__title">Animations</span>
+            <span class="collapsible__icon">{animationSectionOpen() ? '▼' : '▶'}</span>
+          </Collapsible.Trigger>
+          <Collapsible.Content class="collapsible__content">
+            <div class="control-group">
+              <label class="control-label">Animation Mode</label>
+              <Select<AnimationModeOption>
+                value={animationModeOptions.find((opt) => opt.value === animationMode())}
+                onChange={(option) => {
+                  if (option) {
+                    stopAnimation();
+                    setAnimationMode(option.value);
+                  }
+                }}
+                options={animationModeOptions}
+                optionValue="value"
+                optionTextValue="label"
+                placeholder="Select animation..."
+                itemComponent={(props) => (
+                  <Select.Item item={props.item} class="select__item">
+                    <Select.ItemLabel>{props.item.rawValue.label}</Select.ItemLabel>
+                    <Select.ItemIndicator class="select__item-indicator">✓</Select.ItemIndicator>
+                  </Select.Item>
+                )}
+              >
+                <Select.Trigger class="select__trigger" aria-label="Animation Mode">
+                  <Select.Value<AnimationModeOption>>{(state) => state.selectedOption()?.label}</Select.Value>
+                  <Select.Icon class="select__icon">▼</Select.Icon>
+                </Select.Trigger>
+                <Select.Portal>
+                  <Select.Content class="select__content">
+                    <Select.Listbox class="select__listbox" />
+                  </Select.Content>
+                </Select.Portal>
+              </Select>
+            </div>
+
+            <Show when={animationMode() !== 'none'}>
+              <div class="animation-info">
+                <small>{animationModeOptions.find(o => o.value === animationMode())?.description}</small>
+              </div>
+
+              <div class="animation-controls">
+                <div class="animation-buttons">
+                  <Show when={!animationRunning()} fallback={
+                    <button class="animation-btn stop" onClick={stopAnimation}>Stop Animation</button>
+                  }>
+                    <button class="animation-btn start" onClick={startAnimation}>Start Animation</button>
+                  </Show>
+                </div>
+
+                <Show when={animationMode() === 'kaleidoscope' || animationMode() === 'psychedelic'}>
+                  <div class="control-group">
+                    <label class="control-label">Folds: {kaleidoscopeFolds()}</label>
+                    <Slider value={[kaleidoscopeFolds()]} onChange={(v) => setKaleidoscopeFolds(v[0])} minValue={2} maxValue={12} step={1} class="slider">
+                      <Slider.Track class="slider__track">
+                        <Slider.Fill class="slider__fill" />
+                        <Slider.Thumb class="slider__thumb"><Slider.Input /></Slider.Thumb>
+                      </Slider.Track>
+                    </Slider>
+                  </div>
+                </Show>
+              </div>
+            </Show>
+          </Collapsible.Content>
+        </Collapsible>
+
+        {/* Export & Config Section */}
+        <Collapsible open={exportSectionOpen()} onOpenChange={setExportSectionOpen} class="collapsible">
+          <Collapsible.Trigger class="collapsible__trigger">
+            <span class="collapsible__title">Export & Config</span>
+            <span class="collapsible__icon">{exportSectionOpen() ? '▼' : '▶'}</span>
+          </Collapsible.Trigger>
+          <Collapsible.Content class="collapsible__content">
+            <div class="control-group export-buttons">
+              <button class="export-btn" onClick={exportAsSVG}>Export SVG</button>
+              <button class="export-btn" onClick={exportAsJSON}>Export JSON</button>
+            </div>
+
+            <div class="control-group config-buttons">
+              <button class="config-btn" onClick={saveConfiguration}>Save Config</button>
+              <button class="config-btn" onClick={loadConfiguration}>Load Config</button>
+            </div>
+          </Collapsible.Content>
+        </Collapsible>
 
         <div class="stats">
           <div class="stat-item">
