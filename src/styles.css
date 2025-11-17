@@ -32,6 +32,8 @@ html, body, #root {
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   min-width: 280px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
   z-index: 100;
 }
 
@@ -209,6 +211,88 @@ html, body, #root {
 .regenerate-btn:focus {
   outline: none;
   box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.3);
+}
+
+.secondary-btn {
+  width: 100%;
+  padding: 8px 12px;
+  background: #f0f0f0;
+  color: #333;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.secondary-btn:hover {
+  background: #e0e0e0;
+}
+
+/* Export and Config buttons */
+.export-buttons,
+.config-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.export-btn,
+.config-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s;
+}
+
+.export-btn {
+  background: #27ae60;
+  color: white;
+}
+
+.export-btn:hover {
+  background: #229954;
+}
+
+.config-btn {
+  background: #8e44ad;
+  color: white;
+}
+
+.config-btn:hover {
+  background: #7d3c98;
+}
+
+.export-btn:active,
+.config-btn:active {
+  transform: scale(0.98);
+}
+
+/* Checkboxes */
+.checkboxes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #555;
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #4a90e2;
+  cursor: pointer;
 }
 
 /* Stats */
