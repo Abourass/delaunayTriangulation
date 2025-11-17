@@ -54,6 +54,36 @@ interface VoronoiGrowthState {
   growthSpeed: number;
 }
 
+interface GravityParticle {
+  point: Point;
+  velocity: { x: number; y: number };
+  mass: number;
+}
+
+interface GravitySimState {
+  particles: GravityParticle[];
+  gravity: { x: number; y: number };
+  friction: number;
+}
+
+interface BreathingEffectState {
+  phase: number;
+  trianglePhases: Map<number, number>;
+}
+
+interface WavePropagationState {
+  waveOrigins: Array<{ x: number; y: number; time: number; speed: number }>;
+  time: number;
+}
+
+interface MorphingState {
+  sourcePoints: Point[];
+  targetPoints: Point[];
+  progress: number;
+  currentGeneratorIndex: number;
+  generatorSequence: string[];
+}
+
 interface AlgorithmStep {
   type: 'add_point' | 'find_bad' | 'find_boundary' | 'remove_bad' | 'retriangulate' | 'cleanup';
   description: string;
@@ -88,6 +118,10 @@ const animationModeOptions: AnimationModeOption[] = [
   { value: 'edgeFlip', label: 'Edge Flip', description: 'Visualize Delaunay edge flipping for illegal edges' },
   { value: 'circumcircleSweep', label: 'Circumcircle Sweep', description: 'Show each circumcircle test as it happens' },
   { value: 'voronoiGrowth', label: 'Voronoi Growth', description: 'Cells expand outward from generating points' },
+  { value: 'gravitySim', label: 'Gravity Simulation', description: 'Points drift under physics forces, continuously retriangulating' },
+  { value: 'breathingEffect', label: 'Breathing Effect', description: 'Triangles pulse/expand based on their area' },
+  { value: 'wavePropagation', label: 'Wave Propagation', description: 'Color waves ripple across connected triangles' },
+  { value: 'morphing', label: 'Morphing', description: 'Smooth transition between different point generator patterns' },
 ];
 
 function App() {
@@ -138,6 +172,12 @@ function App() {
   const [edgeFlipState, setEdgeFlipState] = createSignal<EdgeFlipState | null>(null);
   const [circumcircleSweepState, setCircumcircleSweepState] = createSignal<CircumcircleSweepState | null>(null);
   const [voronoiGrowthState, setVoronoiGrowthState] = createSignal<VoronoiGrowthState | null>(null);
+
+  // Dynamic visualization animation states
+  const [gravitySimState, setGravitySimState] = createSignal<GravitySimState | null>(null);
+  const [breathingEffectState, setBreathingEffectState] = createSignal<BreathingEffectState | null>(null);
+  const [wavePropagationState, setWavePropagationState] = createSignal<WavePropagationState | null>(null);
+  const [morphingState, setMorphingState] = createSignal<MorphingState | null>(null);
 
   // Collapsible section states
   const [generatorSectionOpen, setGeneratorSectionOpen] = createSignal(true);
@@ -839,6 +879,320 @@ function App() {
     });
   };
 
+  // Initialize gravity simulation
+  const initGravitySim = () => {
+    let currentPoints = points();
+
+    // If no points, generate some
+    if (currentPoints.length < 3) {
+      const { width, height } = dimensions();
+      const generator = getGenerator();
+      currentPoints = generator.generate(width, height, { count: pointCount() });
+      const newTriangles = BowyerWatson.triangulate(currentPoints, width, height);
+      setPoints(currentPoints);
+      setTriangles(newTriangles);
+    }
+
+    const particles: GravityParticle[] = currentPoints.map((p) => ({
+      point: new Point(p.x, p.y),
+      velocity: {
+        x: (Math.random() - 0.5) * 2,
+        y: (Math.random() - 0.5) * 2,
+      },
+      mass: 1 + Math.random() * 2,
+    }));
+
+    setGravitySimState({
+      particles,
+      gravity: { x: 0, y: 0.2 }, // Slight downward gravity
+      friction: 0.98,
+    });
+  };
+
+  // Update gravity simulation
+  const updateGravitySim = () => {
+    const state = gravitySimState();
+    if (!state) return;
+
+    const { width, height } = dimensions();
+    const newParticles = state.particles.map((particle) => {
+      let vx = particle.velocity.x + state.gravity.x;
+      let vy = particle.velocity.y + state.gravity.y;
+
+      // Apply friction
+      vx *= state.friction;
+      vy *= state.friction;
+
+      // Update position
+      let newX = particle.point.x + vx;
+      let newY = particle.point.y + vy;
+
+      // Bounce off walls with energy loss
+      if (newX <= 0 || newX >= width) {
+        vx = -vx * 0.8;
+        newX = Math.max(0, Math.min(width, newX));
+      }
+      if (newY <= 0 || newY >= height) {
+        vy = -vy * 0.8;
+        newY = Math.max(0, Math.min(height, newY));
+      }
+
+      // Add particle-to-particle repulsion (simplified)
+      for (const other of state.particles) {
+        if (other === particle) continue;
+        const dx = newX - other.point.x;
+        const dy = newY - other.point.y;
+        const distSq = dx * dx + dy * dy;
+        const minDist = 30;
+
+        if (distSq < minDist * minDist && distSq > 0) {
+          const dist = Math.sqrt(distSq);
+          const force = (minDist - dist) / minDist;
+          vx += (dx / dist) * force * 0.5;
+          vy += (dy / dist) * force * 0.5;
+        }
+      }
+
+      return {
+        point: new Point(newX, newY),
+        velocity: { x: vx, y: vy },
+        mass: particle.mass,
+      };
+    });
+
+    setGravitySimState({
+      ...state,
+      particles: newParticles,
+    });
+
+    // Retriangulate with new positions
+    const newPoints = newParticles.map((p) => p.point);
+    if (newPoints.length >= 3) {
+      const newTriangles = BowyerWatson.triangulate(newPoints, width, height);
+      setPoints(newPoints);
+      setTriangles(newTriangles);
+    }
+  };
+
+  // Initialize breathing effect
+  const initBreathingEffect = () => {
+    const tris = triangles();
+    if (tris.length === 0) return;
+
+    const trianglePhases = new Map<number, number>();
+
+    // Give each triangle a random phase offset based on its position
+    for (let i = 0; i < tris.length; i++) {
+      const centroid = tris[i].getCentroid();
+      const { width, height } = dimensions();
+      const normalizedX = centroid.x / width;
+      const normalizedY = centroid.y / height;
+      // Create wave pattern across the canvas
+      trianglePhases.set(i, (normalizedX + normalizedY) * Math.PI * 2);
+    }
+
+    setBreathingEffectState({
+      phase: 0,
+      trianglePhases,
+    });
+  };
+
+  // Update breathing effect
+  const updateBreathingEffect = () => {
+    const state = breathingEffectState();
+    if (!state) return;
+
+    setBreathingEffectState({
+      ...state,
+      phase: state.phase + 0.05,
+    });
+  };
+
+  // Initialize wave propagation
+  const initWavePropagation = () => {
+    const { width, height } = dimensions();
+
+    setWavePropagationState({
+      waveOrigins: [
+        { x: width / 2, y: height / 2, time: 0, speed: 3 }
+      ],
+      time: 0,
+    });
+  };
+
+  // Update wave propagation
+  const updateWavePropagation = () => {
+    const state = wavePropagationState();
+    if (!state) return;
+
+    const { width, height } = dimensions();
+    const newState = { ...state };
+    newState.time += 1;
+
+    // Periodically add new wave origins at random locations
+    if (newState.time % 120 === 0) {
+      newState.waveOrigins.push({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        time: newState.time,
+        speed: 2 + Math.random() * 2,
+      });
+
+      // Keep only recent wave origins
+      if (newState.waveOrigins.length > 5) {
+        newState.waveOrigins.shift();
+      }
+    }
+
+    setWavePropagationState(newState);
+  };
+
+  // Initialize morphing
+  const initMorphing = () => {
+    const { width, height } = dimensions();
+
+    const generatorSequence = ['random', 'grid', 'circular', 'spiral'];
+
+    // Generate source points (current)
+    const sourceGen = new RandomPointGenerator();
+    const sourcePoints = sourceGen.generate(width, height, { count: pointCount() });
+
+    // Generate target points (grid)
+    const targetGen = new GridPointGenerator();
+    const side = Math.ceil(Math.sqrt(pointCount()));
+    const targetPoints = targetGen.generate(width, height, { rows: side, cols: side, jitter: 0.3 });
+
+    // Make sure we have the same number of points
+    const minLength = Math.min(sourcePoints.length, targetPoints.length);
+
+    setMorphingState({
+      sourcePoints: sourcePoints.slice(0, minLength),
+      targetPoints: targetPoints.slice(0, minLength),
+      progress: 0,
+      currentGeneratorIndex: 0,
+      generatorSequence,
+    });
+
+    // Set initial points
+    setPoints(sourcePoints.slice(0, minLength));
+    const initialTriangles = BowyerWatson.triangulate(sourcePoints.slice(0, minLength), width, height);
+    setTriangles(initialTriangles);
+  };
+
+  // Update morphing
+  const updateMorphing = () => {
+    const state = morphingState();
+    if (!state) return;
+
+    const { width, height } = dimensions();
+    let newProgress = state.progress + 0.01;
+
+    // Ease in-out interpolation
+    const easeInOutCubic = (t: number) => {
+      return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    };
+
+    const t = easeInOutCubic(newProgress);
+
+    // If morphing is complete, switch to next generator
+    if (newProgress >= 1) {
+      newProgress = 0;
+
+      const nextIndex = (state.currentGeneratorIndex + 1) % state.generatorSequence.length;
+      const nextNextIndex = (nextIndex + 1) % state.generatorSequence.length;
+
+      const currentGenName = state.generatorSequence[nextIndex];
+      const nextGenName = state.generatorSequence[nextNextIndex];
+
+      // Generate new target points
+      let currentGen;
+      let nextGen;
+
+      switch (currentGenName) {
+        case 'grid':
+          currentGen = new GridPointGenerator();
+          break;
+        case 'circular':
+          currentGen = new CircularPointGenerator();
+          break;
+        case 'spiral':
+          currentGen = new SpiralPointGenerator();
+          break;
+        default:
+          currentGen = new RandomPointGenerator();
+      }
+
+      switch (nextGenName) {
+        case 'grid':
+          nextGen = new GridPointGenerator();
+          break;
+        case 'circular':
+          nextGen = new CircularPointGenerator();
+          break;
+        case 'spiral':
+          nextGen = new SpiralPointGenerator();
+          break;
+        default:
+          nextGen = new RandomPointGenerator();
+      }
+
+      const side = Math.ceil(Math.sqrt(pointCount()));
+      const rings = Math.max(2, Math.floor(Math.sqrt(pointCount() / 3)));
+      const pointsPerRing = Math.floor(pointCount() / (rings * (rings + 1) / 2));
+
+      const currentOpts = currentGenName === 'grid'
+        ? { rows: side, cols: side, jitter: 0.3 }
+        : currentGenName === 'circular'
+        ? { rings, pointsPerRing: Math.max(4, pointsPerRing) }
+        : currentGenName === 'spiral'
+        ? { count: pointCount(), turns: 8 }
+        : { count: pointCount() };
+
+      const nextOpts = nextGenName === 'grid'
+        ? { rows: side, cols: side, jitter: 0.3 }
+        : nextGenName === 'circular'
+        ? { rings, pointsPerRing: Math.max(4, pointsPerRing) }
+        : nextGenName === 'spiral'
+        ? { count: pointCount(), turns: 8 }
+        : { count: pointCount() };
+
+      const newSource = currentGen.generate(width, height, currentOpts);
+      const newTarget = nextGen.generate(width, height, nextOpts);
+
+      const minLength = Math.min(newSource.length, newTarget.length);
+
+      setMorphingState({
+        sourcePoints: newSource.slice(0, minLength),
+        targetPoints: newTarget.slice(0, minLength),
+        progress: 0,
+        currentGeneratorIndex: nextIndex,
+        generatorSequence: state.generatorSequence,
+      });
+      return;
+    }
+
+    // Interpolate between source and target
+    const interpolatedPoints = state.sourcePoints.map((src, i) => {
+      const tgt = state.targetPoints[i];
+      return new Point(
+        src.x + (tgt.x - src.x) * t,
+        src.y + (tgt.y - src.y) * t
+      );
+    });
+
+    setMorphingState({
+      ...state,
+      progress: newProgress,
+    });
+
+    // Update triangulation with interpolated points
+    if (interpolatedPoints.length >= 3) {
+      const newTriangles = BowyerWatson.triangulate(interpolatedPoints, width, height);
+      setPoints(interpolatedPoints);
+      setTriangles(newTriangles);
+    }
+  };
+
   // Render with animations
   const renderWithAnimation = () => {
     if (!canvasRef) return;
@@ -1261,6 +1615,257 @@ function App() {
       }
 
       updateVoronoiGrowth();
+    } else if (mode === 'gravitySim') {
+      // Render gravity simulation
+      const state = gravitySimState();
+
+      // Draw triangles
+      for (let i = 0; i < tris.length; i++) {
+        const tri = tris[i];
+        const fill = getTriangleColor(tri, i);
+
+        ctx.beginPath();
+        ctx.moveTo(tri.a.x, tri.a.y);
+        ctx.lineTo(tri.b.x, tri.b.y);
+        ctx.lineTo(tri.c.x, tri.c.y);
+        ctx.closePath();
+
+        if (fill) {
+          ctx.fillStyle = fill;
+          ctx.fill();
+        }
+        ctx.strokeStyle = strokeColor();
+        ctx.lineWidth = lineWidth();
+        ctx.stroke();
+      }
+
+      // Draw particles with mass-based size
+      if (state) {
+        for (let i = 0; i < state.particles.length; i++) {
+          const particle = state.particles[i];
+          const hue = (i / state.particles.length) * 360;
+
+          // Draw velocity vector
+          ctx.strokeStyle = `hsla(${hue}, 70%, 50%, 0.5)`;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(particle.point.x, particle.point.y);
+          ctx.lineTo(
+            particle.point.x + particle.velocity.x * 5,
+            particle.point.y + particle.velocity.y * 5
+          );
+          ctx.stroke();
+
+          // Draw particle
+          const size = 3 + particle.mass * 2;
+          ctx.fillStyle = `hsl(${hue}, 80%, 60%)`;
+          ctx.beginPath();
+          ctx.arc(particle.point.x, particle.point.y, size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      updateGravitySim();
+    } else if (mode === 'breathingEffect') {
+      // Render breathing effect
+      const state = breathingEffectState();
+
+      if (state) {
+        for (let i = 0; i < tris.length; i++) {
+          const tri = tris[i];
+          const area = tri.getArea();
+          const phaseOffset = state.trianglePhases.get(i) || 0;
+
+          // Calculate breathing scale based on area and phase
+          const breathAmount = Math.sin(state.phase + phaseOffset) * 0.15 + 1;
+
+          // Get centroid for scaling
+          const centroid = tri.getCentroid();
+
+          // Scale triangle from centroid
+          const scaledA = {
+            x: centroid.x + (tri.a.x - centroid.x) * breathAmount,
+            y: centroid.y + (tri.a.y - centroid.y) * breathAmount,
+          };
+          const scaledB = {
+            x: centroid.x + (tri.b.x - centroid.x) * breathAmount,
+            y: centroid.y + (tri.b.y - centroid.y) * breathAmount,
+          };
+          const scaledC = {
+            x: centroid.x + (tri.c.x - centroid.x) * breathAmount,
+            y: centroid.y + (tri.c.y - centroid.y) * breathAmount,
+          };
+
+          ctx.beginPath();
+          ctx.moveTo(scaledA.x, scaledA.y);
+          ctx.lineTo(scaledB.x, scaledB.y);
+          ctx.lineTo(scaledC.x, scaledC.y);
+          ctx.closePath();
+
+          // Color based on breathing phase
+          const hue = (breathAmount - 0.85) * 1200;
+          const saturation = 70;
+          const lightness = 50 + Math.sin(state.phase + phaseOffset) * 20;
+
+          ctx.fillStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+          ctx.fill();
+          ctx.strokeStyle = strokeColor();
+          ctx.lineWidth = lineWidth();
+          ctx.stroke();
+        }
+      }
+
+      updateBreathingEffect();
+    } else if (mode === 'wavePropagation') {
+      // Render wave propagation
+      const state = wavePropagationState();
+
+      if (state) {
+        for (let i = 0; i < tris.length; i++) {
+          const tri = tris[i];
+          const centroid = tri.getCentroid();
+
+          // Calculate color based on distance from all wave origins
+          let totalWaveEffect = 0;
+          let dominantHue = 0;
+
+          for (const wave of state.waveOrigins) {
+            const dx = centroid.x - wave.x;
+            const dy = centroid.y - wave.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const waveAge = state.time - wave.time;
+
+            // Wave propagation with decay
+            const waveRadius = waveAge * wave.speed;
+            const distFromWavefront = Math.abs(dist - waveRadius);
+            const waveWidth = 100;
+
+            if (distFromWavefront < waveWidth) {
+              const waveStrength = (1 - distFromWavefront / waveWidth);
+              totalWaveEffect += waveStrength;
+
+              // Calculate hue based on wave position
+              const angle = Math.atan2(dy, dx);
+              const hue = ((angle + Math.PI) / (Math.PI * 2)) * 360 + waveAge * 2;
+              dominantHue += hue * waveStrength;
+            }
+          }
+
+          totalWaveEffect = Math.min(1, totalWaveEffect);
+          dominantHue = dominantHue / Math.max(0.001, totalWaveEffect);
+
+          ctx.beginPath();
+          ctx.moveTo(tri.a.x, tri.a.y);
+          ctx.lineTo(tri.b.x, tri.b.y);
+          ctx.lineTo(tri.c.x, tri.c.y);
+          ctx.closePath();
+
+          if (totalWaveEffect > 0.01) {
+            const saturation = 70 + totalWaveEffect * 30;
+            const lightness = 40 + totalWaveEffect * 40;
+            ctx.fillStyle = `hsl(${dominantHue}, ${saturation}%, ${lightness}%)`;
+            ctx.fill();
+          }
+
+          ctx.strokeStyle = strokeColor();
+          ctx.lineWidth = lineWidth() * 0.5;
+          ctx.stroke();
+        }
+
+        // Draw wave origin points
+        for (const wave of state.waveOrigins) {
+          const waveAge = state.time - wave.time;
+          const radius = waveAge * wave.speed;
+
+          // Draw expanding circle
+          ctx.strokeStyle = `rgba(255, 255, 255, ${Math.max(0, 0.5 - waveAge / 200)})`;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(wave.x, wave.y, radius, 0, Math.PI * 2);
+          ctx.stroke();
+
+          // Draw origin point
+          if (waveAge < 60) {
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(wave.x, wave.y, 5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+
+      updateWavePropagation();
+    } else if (mode === 'morphing') {
+      // Render morphing
+      const state = morphingState();
+
+      for (let i = 0; i < tris.length; i++) {
+        const tri = tris[i];
+        const fill = getTriangleColor(tri, i);
+
+        ctx.beginPath();
+        ctx.moveTo(tri.a.x, tri.a.y);
+        ctx.lineTo(tri.b.x, tri.b.y);
+        ctx.lineTo(tri.c.x, tri.c.y);
+        ctx.closePath();
+
+        // Color changes based on morphing progress
+        if (state) {
+          const progress = state.progress;
+          const hue = progress * 360;
+          ctx.fillStyle = `hsla(${hue}, 70%, 60%, 0.6)`;
+          ctx.fill();
+        } else if (fill) {
+          ctx.fillStyle = fill;
+          ctx.fill();
+        }
+
+        ctx.strokeStyle = strokeColor();
+        ctx.lineWidth = lineWidth();
+        ctx.stroke();
+      }
+
+      // Draw points with trails showing morphing
+      if (state) {
+        const pts = points();
+        for (let i = 0; i < pts.length; i++) {
+          const p = pts[i];
+          const src = state.sourcePoints[i];
+          const tgt = state.targetPoints[i];
+
+          if (src && tgt) {
+            // Draw path from source to target
+            ctx.strokeStyle = `rgba(255, 255, 255, 0.2)`;
+            ctx.lineWidth = 1;
+            ctx.setLineDash([2, 2]);
+            ctx.beginPath();
+            ctx.moveTo(src.x, src.y);
+            ctx.lineTo(tgt.x, tgt.y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+
+          // Draw current point
+          const hue = (i / pts.length) * 360;
+          ctx.fillStyle = `hsl(${hue}, 80%, 60%)`;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Draw progress indicator
+        ctx.fillStyle = '#2c3e50';
+        ctx.font = '14px monospace';
+        const currentGen = state.generatorSequence[state.currentGeneratorIndex];
+        const nextGen = state.generatorSequence[(state.currentGeneratorIndex + 1) % state.generatorSequence.length];
+        ctx.fillText(
+          `Morphing: ${currentGen} → ${nextGen} (${(state.progress * 100).toFixed(0)}%)`,
+          10,
+          height - 10
+        );
+      }
+
+      updateMorphing();
     }
 
     ctx.restore();
@@ -1285,6 +1890,14 @@ function App() {
       initCircumcircleSweep();
     } else if (mode === 'voronoiGrowth') {
       initVoronoiGrowth();
+    } else if (mode === 'gravitySim') {
+      initGravitySim();
+    } else if (mode === 'breathingEffect') {
+      initBreathingEffect();
+    } else if (mode === 'wavePropagation') {
+      initWavePropagation();
+    } else if (mode === 'morphing') {
+      initMorphing();
     }
 
     const animate = () => {
