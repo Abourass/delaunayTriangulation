@@ -65,6 +65,7 @@ const animationModeOptions: AnimationModeOption[] = [
   { value: 'colorFlow', label: 'Color Flow', description: 'Colors cascade through triangle adjacency' },
   { value: 'particleTrails', label: 'Particle Trails', description: 'Points move with trailing history' },
   { value: 'kaleidoscope', label: 'Kaleidoscope', description: 'Mirror/rotate for symmetric patterns' },
+  { value: 'psychedelic', label: 'Psychedelic', description: 'Colorful rotating kaleidoscope' },
 ];
 
 function App() {
@@ -557,13 +558,24 @@ function App() {
 
   // Initialize particle trails
   const initParticleTrails = () => {
-    const currentPoints = points();
+    let currentPoints = points();
+
+    // If no points, generate some
+    if (currentPoints.length < 3) {
+      const { width, height } = dimensions();
+      const generator = getGenerator();
+      currentPoints = generator.generate(width, height, { count: pointCount() });
+      const newTriangles = BowyerWatson.triangulate(currentPoints, width, height);
+      setPoints(currentPoints);
+      setTriangles(newTriangles);
+    }
+
     const trails: PointTrail[] = currentPoints.map((p) => ({
       point: new Point(p.x, p.y),
       trail: [{ x: p.x, y: p.y, age: 0 }],
       velocity: {
-        x: (Math.random() - 0.5) * 2,
-        y: (Math.random() - 0.5) * 2,
+        x: (Math.random() - 0.5) * 4,
+        y: (Math.random() - 0.5) * 4,
       },
     }));
     setParticleTrails(trails);
@@ -572,7 +584,14 @@ function App() {
   // Update particle trails
   const updateParticleTrails = () => {
     const { width, height } = dimensions();
-    const trails = particleTrails().map((pt) => {
+    const currentTrails = particleTrails();
+
+    if (currentTrails.length === 0) {
+      initParticleTrails();
+      return;
+    }
+
+    const trails = currentTrails.map((pt) => {
       // Update position with velocity
       let newX = pt.point.x + pt.velocity.x;
       let newY = pt.point.y + pt.velocity.y;
@@ -581,29 +600,29 @@ function App() {
 
       // Bounce off walls
       if (newX <= 0 || newX >= width) {
-        newVx = -newVx * 0.9;
-        newX = Math.max(0, Math.min(width, newX));
+        newVx = -newVx * 0.95;
+        newX = Math.max(1, Math.min(width - 1, newX));
       }
       if (newY <= 0 || newY >= height) {
-        newVy = -newVy * 0.9;
-        newY = Math.max(0, Math.min(height, newY));
+        newVy = -newVy * 0.95;
+        newY = Math.max(1, Math.min(height - 1, newY));
       }
 
       // Add slight random perturbation
-      newVx += (Math.random() - 0.5) * 0.1;
-      newVy += (Math.random() - 0.5) * 0.1;
+      newVx += (Math.random() - 0.5) * 0.3;
+      newVy += (Math.random() - 0.5) * 0.3;
 
       // Limit velocity
       const speed = Math.sqrt(newVx * newVx + newVy * newVy);
-      if (speed > 3) {
-        newVx = (newVx / speed) * 3;
-        newVy = (newVy / speed) * 3;
+      if (speed > 5) {
+        newVx = (newVx / speed) * 5;
+        newVy = (newVy / speed) * 5;
       }
 
-      // Update trail (keep last 20 positions)
+      // Update trail (keep last 30 positions)
       const newTrail = [
         { x: newX, y: newY, age: 0 },
-        ...pt.trail.map((t) => ({ ...t, age: t.age + 1 })).slice(0, 19),
+        ...pt.trail.map((t) => ({ ...t, age: t.age + 1 })).slice(0, 29),
       ];
 
       return {
@@ -762,6 +781,61 @@ function App() {
       }
 
       updateParticleTrails();
+    } else if (mode === 'psychedelic') {
+      // Render psychedelic kaleidoscope with shifting colors
+      const folds = kaleidoscopeFolds();
+      const rotation = kaleidoscopeRotation();
+      const centerX = width / 2;
+      const centerY = height / 2;
+      const time = rotation * 50; // Use rotation as time base
+
+      for (let fold = 0; fold < folds; fold++) {
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate((fold * Math.PI * 2) / folds + rotation);
+
+        // Mirror every other fold
+        if (fold % 2 === 1) {
+          ctx.scale(-1, 1);
+        }
+
+        ctx.translate(-centerX, -centerY);
+
+        // Draw triangles with psychedelic colors
+        for (let i = 0; i < tris.length; i++) {
+          const tri = tris[i];
+          const centroid = tri.getCentroid();
+
+          // Calculate psychedelic color based on position and time
+          const distFromCenter = Math.sqrt(
+            Math.pow(centroid.x - centerX, 2) + Math.pow(centroid.y - centerY, 2)
+          );
+          const angle = Math.atan2(centroid.y - centerY, centroid.x - centerX);
+
+          // Create shifting rainbow effect
+          const hue = (angle * 180 / Math.PI + time + distFromCenter * 0.5 + fold * 30) % 360;
+          const saturation = 80 + Math.sin(time * 0.05 + i * 0.1) * 20;
+          const lightness = 50 + Math.cos(distFromCenter * 0.02 + time * 0.03) * 20;
+
+          ctx.beginPath();
+          ctx.moveTo(tri.a.x, tri.a.y);
+          ctx.lineTo(tri.b.x, tri.b.y);
+          ctx.lineTo(tri.c.x, tri.c.y);
+          ctx.closePath();
+
+          ctx.fillStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+          ctx.fill();
+
+          // Use complementary color for stroke for extra psychedelic effect
+          ctx.strokeStyle = `hsl(${(hue + 180) % 360}, 60%, 30%)`;
+          ctx.lineWidth = lineWidth() * 0.5;
+          ctx.stroke();
+        }
+
+        ctx.restore();
+      }
+
+      setKaleidoscopeRotation(rotation + 0.008);
     }
 
     ctx.restore();
@@ -778,7 +852,7 @@ function App() {
       initColorFlow();
     } else if (mode === 'particleTrails') {
       initParticleTrails();
-    } else if (mode === 'kaleidoscope') {
+    } else if (mode === 'kaleidoscope' || mode === 'psychedelic') {
       setKaleidoscopeRotation(0);
     }
 
@@ -1274,7 +1348,7 @@ function App() {
               </Show>
             </div>
 
-            <Show when={animationMode() === 'kaleidoscope'}>
+            <Show when={animationMode() === 'kaleidoscope' || animationMode() === 'psychedelic'}>
               <div class="control-group">
                 <label class="control-label">Folds: {kaleidoscopeFolds()}</label>
                 <Slider value={[kaleidoscopeFolds()]} onChange={(v) => setKaleidoscopeFolds(v[0])} minValue={2} maxValue={12} step={1} class="slider">
