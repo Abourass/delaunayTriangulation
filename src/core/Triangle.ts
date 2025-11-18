@@ -1,40 +1,43 @@
-import { Point } from './Point.mjs';
-import { Edge } from './Edge.mjs';
+import { Point } from './Point';
+import { Edge } from './Edge';
 
 /**
  * Represents a triangle defined by three vertices.
  * Provides geometric operations without rendering concerns.
  */
 export class Triangle {
+  public a: Point;
+  public b: Point;
+  public c: Point;
+
+  private _circumcenter: Point | null = null;
+  private _circumradiusSquared: number | null = null;
+
   /**
    * Create a triangle from three points
-   * @param {Point} a - First vertex
-   * @param {Point} b - Second vertex
-   * @param {Point} c - Third vertex
+   * @param a - First vertex
+   * @param b - Second vertex
+   * @param c - Third vertex
    */
-  constructor(a, b, c) {
+  constructor(a: Point, b: Point, c: Point) {
     this.a = a;
     this.b = b;
     this.c = c;
-
-    // Cache circumcircle data (computed on first access)
-    this._circumcenter = null;
-    this._circumradiusSquared = null;
   }
 
   /**
    * Get the vertices of this triangle
-   * @returns {Point[]} Array of three vertices
+   * @returns Array of three vertices
    */
-  getVertices() {
+  getVertices(): Point[] {
     return [this.a, this.b, this.c];
   }
 
   /**
    * Get the edges of this triangle
-   * @returns {Edge[]} Array of three edges
+   * @returns Array of three edges
    */
-  getEdges() {
+  getEdges(): Edge[] {
     return [
       new Edge(this.a, this.b),
       new Edge(this.b, this.c),
@@ -44,10 +47,10 @@ export class Triangle {
 
   /**
    * Check if this triangle shares any vertex with another triangle
-   * @param {Triangle} triangle - The triangle to compare
-   * @returns {boolean} True if triangles share at least one vertex
+   * @param triangle - The triangle to compare
+   * @returns True if triangles share at least one vertex
    */
-  sharesVertexWith(triangle) {
+  sharesVertexWith(triangle: Triangle): boolean {
     const thisVertices = this.getVertices();
     const otherVertices = triangle.getVertices();
 
@@ -63,20 +66,20 @@ export class Triangle {
 
   /**
    * Check if this triangle has a specific edge
-   * @param {Edge} edge - The edge to check
-   * @returns {boolean} True if triangle contains the edge
+   * @param edge - The edge to check
+   * @returns True if triangle contains the edge
    */
-  hasEdge(edge) {
+  hasEdge(edge: Edge): boolean {
     const edges = this.getEdges();
     return edges.some(e => e.equals(edge));
   }
 
   /**
    * Check if this triangle contains a specific vertex
-   * @param {Point} vertex - The vertex to check
-   * @returns {boolean} True if triangle contains the vertex
+   * @param vertex - The vertex to check
+   * @returns True if triangle contains the vertex
    */
-  hasVertex(vertex) {
+  hasVertex(vertex: Point): boolean {
     return (
       this.a.equals(vertex) ||
       this.b.equals(vertex) ||
@@ -87,9 +90,9 @@ export class Triangle {
   /**
    * Calculate the circumcenter of this triangle
    * The circumcenter is equidistant from all three vertices
-   * @returns {Point} The circumcenter
+   * @returns The circumcenter
    */
-  getCircumcenter() {
+  getCircumcenter(): Point {
     if (this._circumcenter) {
       return this._circumcenter;
     }
@@ -122,17 +125,17 @@ export class Triangle {
 
   /**
    * Get the circumradius of this triangle
-   * @returns {number} The circumradius
+   * @returns The circumradius
    */
-  getCircumradius() {
+  getCircumradius(): number {
     return Math.sqrt(this.getCircumradiusSquared());
   }
 
   /**
    * Get the squared circumradius (faster than getCircumradius)
-   * @returns {number} The squared circumradius
+   * @returns The squared circumradius
    */
-  getCircumradiusSquared() {
+  getCircumradiusSquared(): number {
     if (this._circumradiusSquared !== null) {
       return this._circumradiusSquared;
     }
@@ -145,10 +148,10 @@ export class Triangle {
   /**
    * Check if a point lies inside the circumcircle of this triangle
    * This is a key operation in Delaunay triangulation
-   * @param {Point} point - The point to check
-   * @returns {boolean} True if point is inside circumcircle
+   * @param point - The point to check
+   * @returns True if point is inside circumcircle
    */
-  containsPointInCircumcircle(point) {
+  containsPointInCircumcircle(point: Point): boolean {
     const center = this.getCircumcenter();
     const radiusSquared = this.getCircumradiusSquared();
     const distSquared = point.distanceToSquared(center);
@@ -157,9 +160,9 @@ export class Triangle {
 
   /**
    * Calculate the area of this triangle
-   * @returns {number} The area (positive)
+   * @returns The area (positive)
    */
-  getArea() {
+  getArea(): number {
     return Math.abs(
       (this.a.x * (this.b.y - this.c.y) +
        this.b.x * (this.c.y - this.a.y) +
@@ -169,9 +172,9 @@ export class Triangle {
 
   /**
    * Calculate the centroid (center of mass) of this triangle
-   * @returns {Point} The centroid
+   * @returns The centroid
    */
-  getCentroid() {
+  getCentroid(): Point {
     return new Point(
       (this.a.x + this.b.x + this.c.x) / 3,
       (this.a.y + this.b.y + this.c.y) / 3
@@ -181,10 +184,10 @@ export class Triangle {
   /**
    * Check if a point is inside this triangle
    * Uses barycentric coordinates
-   * @param {Point} point - The point to check
-   * @returns {boolean} True if point is inside triangle
+   * @param point - The point to check
+   * @returns True if point is inside triangle
    */
-  containsPoint(point) {
+  containsPoint(point: Point): boolean {
     const v0 = this.c.sub(this.a);
     const v1 = this.b.sub(this.a);
     const v2 = point.sub(this.a);
@@ -206,16 +209,16 @@ export class Triangle {
    * Invalidate cached circumcircle data
    * Call this if vertices are modified directly
    */
-  invalidateCache() {
+  invalidateCache(): void {
     this._circumcenter = null;
     this._circumradiusSquared = null;
   }
 
   /**
    * Create a string representation of this triangle
-   * @returns {string} String representation
+   * @returns String representation
    */
-  toString() {
+  toString(): string {
     return `Triangle(${this.a.toString()}, ${this.b.toString()}, ${this.c.toString()})`;
   }
 }

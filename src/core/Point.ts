@@ -3,62 +3,65 @@
  * This is the fundamental geometric primitive for the triangulation system.
  */
 export class Point {
-  constructor(x, y) {
+  public x: number;
+  public y: number;
+
+  constructor(x: number, y: number) {
     this.x = x;
     this.y = y;
   }
 
   /**
    * Add another point/vector to this one (immutable)
-   * @param {Point} point - The point to add
-   * @returns {Point} A new Point representing the sum
+   * @param point - The point to add
+   * @returns A new Point representing the sum
    */
-  add(point) {
+  add(point: Point): Point {
     return new Point(this.x + point.x, this.y + point.y);
   }
 
   /**
    * Subtract another point/vector from this one (immutable)
-   * @param {Point} point - The point to subtract
-   * @returns {Point} A new Point representing the difference
+   * @param point - The point to subtract
+   * @returns A new Point representing the difference
    */
-  sub(point) {
+  sub(point: Point): Point {
     return new Point(this.x - point.x, this.y - point.y);
   }
 
   /**
    * Multiply this point by a scalar (immutable)
-   * @param {number} n - The scalar multiplier
-   * @returns {Point} A new Point representing the product
+   * @param n - The scalar multiplier
+   * @returns A new Point representing the product
    */
-  mult(n) {
+  mult(n: number): Point {
     return new Point(this.x * n, this.y * n);
   }
 
   /**
    * Divide this point by a scalar (immutable)
-   * @param {number} n - The scalar divisor
-   * @returns {Point} A new Point representing the quotient
+   * @param n - The scalar divisor
+   * @returns A new Point representing the quotient
    */
-  div(n) {
+  div(n: number): Point {
     return new Point(this.x / n, this.y / n);
   }
 
   /**
    * Get the Euclidean distance to another point
-   * @param {Point} point - The target point
-   * @returns {number} The distance
+   * @param point - The target point
+   * @returns The distance
    */
-  distanceTo(point) {
+  distanceTo(point: Point): number {
     return this.sub(point).getLength();
   }
 
   /**
    * Get the squared distance to another point (faster than distanceTo)
-   * @param {Point} point - The target point
-   * @returns {number} The squared distance
+   * @param point - The target point
+   * @returns The squared distance
    */
-  distanceToSquared(point) {
+  distanceToSquared(point: Point): number {
     const dx = this.x - point.x;
     const dy = this.y - point.y;
     return dx * dx + dy * dy;
@@ -66,78 +69,78 @@ export class Point {
 
   /**
    * Get the length/magnitude of this vector
-   * @returns {number} The length
+   * @returns The length
    */
-  getLength() {
+  getLength(): number {
     return Math.sqrt(this.x * this.x + this.y * this.y);
   }
 
   /**
    * Get the squared length (faster than getLength)
-   * @returns {number} The squared length
+   * @returns The squared length
    */
-  getLengthSquared() {
+  getLengthSquared(): number {
     return this.x * this.x + this.y * this.y;
   }
 
   /**
    * Get the angle of this vector in radians
-   * @returns {number} The angle in radians
+   * @returns The angle in radians
    */
-  getAngle() {
+  getAngle(): number {
     return Math.atan2(this.y, this.x);
   }
 
   /**
    * Create a copy of this point
-   * @returns {Point} A new Point with the same coordinates
+   * @returns A new Point with the same coordinates
    */
-  copy() {
+  copy(): Point {
     return new Point(this.x, this.y);
   }
 
   /**
    * Check if this point equals another point
-   * @param {Point} point - The point to compare
-   * @returns {boolean} True if coordinates are equal
+   * @param point - The point to compare
+   * @returns True if coordinates are equal
    */
-  equals(point) {
+  equals(point: Point): boolean {
     return this.x === point.x && this.y === point.y;
   }
 
   /**
    * Check if this point is approximately equal to another (within epsilon)
-   * @param {Point} point - The point to compare
-   * @param {number} epsilon - The tolerance (default: 1e-10)
-   * @returns {boolean} True if coordinates are within epsilon
+   * @param point - The point to compare
+   * @param epsilon - The tolerance (default: 1e-10)
+   * @returns True if coordinates are within epsilon
    */
-  approximatelyEquals(point, epsilon = 1e-10) {
+  approximatelyEquals(point: Point, epsilon: number = 1e-10): boolean {
     return Math.abs(this.x - point.x) < epsilon && Math.abs(this.y - point.y) < epsilon;
   }
 
   /**
    * Create a string representation of this point
-   * @returns {string} String representation
+   * @returns String representation
    */
-  toString() {
+  toString(): string {
     return `Point(${this.x}, ${this.y})`;
   }
 
   /**
    * Create a Point from polar coordinates
-   * @param {number} angle - The angle in radians
-   * @param {number} length - The magnitude
-   * @returns {Point} A new Point
+   * @param angle - The angle in radians
+   * @param length - The magnitude
+   * @returns A new Point
    */
-  static fromPolar(angle, length) {
+  static fromPolar(angle: number, length: number): Point {
     return new Point(Math.cos(angle) * length, Math.sin(angle) * length);
   }
 
   /**
    * Create a zero point
-   * @returns {Point} A new Point at origin
+   * @returns A new Point at origin
    */
-  static zero() {
+  static zero(): Point {
     return new Point(0, 0);
   }
 }
