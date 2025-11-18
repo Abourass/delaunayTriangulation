@@ -1,26 +1,36 @@
-import { Renderer } from './Renderer.mjs';
+import { Renderer, RenderStyle } from './Renderer';
+import { Point } from '../core/Point';
+import { Edge } from '../core/Edge';
+import { Triangle } from '../core/Triangle';
 
 /**
  * Canvas 2D implementation of the Renderer interface.
  * Renders triangulations using the HTML5 Canvas API.
  */
 export class CanvasRenderer extends Renderer {
+  private canvas: HTMLCanvasElement;
+  private ctx: CanvasRenderingContext2D;
+
   /**
    * Create a Canvas renderer
-   * @param {HTMLCanvasElement} canvas - The canvas element
+   * @param canvas - The canvas element
    */
-  constructor(canvas) {
+  constructor(canvas: HTMLCanvasElement) {
     super(canvas);
     this.canvas = canvas;
-    this.ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      throw new Error('Failed to get 2D rendering context');
+    }
+    this.ctx = ctx;
   }
 
   /**
    * Set up the rendering context
-   * @param {number} width - Canvas width
-   * @param {number} height - Canvas height
+   * @param width - Canvas width
+   * @param height - Canvas height
    */
-  setup(width, height) {
+  setup(width: number, height: number): void {
     this.canvas.width = width;
     this.canvas.height = height;
     this.width = width;
@@ -32,24 +42,19 @@ export class CanvasRenderer extends Renderer {
 
   /**
    * Clear the canvas
-   * @param {string} [color='white'] - Background color
+   * @param color - Background color
    */
-  clear(color = 'white') {
+  clear(color: string = 'white'): void {
     this.ctx.fillStyle = color;
     this.ctx.fillRect(0, 0, this.width, this.height);
   }
 
   /**
    * Render a single triangle
-   * @param {Triangle} triangle - The triangle to render
-   * @param {Object} [style] - Rendering style options
-   * @param {string} [style.strokeStyle='black'] - Stroke color
-   * @param {number} [style.lineWidth] - Line width (random 1-4 if not specified)
-   * @param {string} [style.fillStyle] - Fill color (optional)
-   * @param {boolean} [style.drawInteriorLines=true] - Draw interior parallel lines
-   * @param {number} [style.interiorLineCount] - Number of interior lines (random 2-11 if not specified)
+   * @param triangle - The triangle to render
+   * @param style - Rendering style options
    */
-  renderTriangle(triangle, style = {}) {
+  renderTriangle(triangle: Triangle, style: RenderStyle = {}): void {
     const ctx = this.ctx;
 
     // Set stroke style
@@ -80,10 +85,10 @@ export class CanvasRenderer extends Renderer {
   /**
    * Draw interior parallel lines within a triangle
    * Creates the "similar triangles" visual effect
-   * @param {Triangle} triangle - The triangle
-   * @param {number} count - Number of lines to draw
+   * @param triangle - The triangle
+   * @param count - Number of lines to draw
    */
-  drawInteriorLines(triangle, count) {
+  private drawInteriorLines(triangle: Triangle, count: number): void {
     const ctx = this.ctx;
     const { a, b, c } = triangle;
 
@@ -102,13 +107,13 @@ export class CanvasRenderer extends Renderer {
 
   /**
    * Get evenly spaced points along a line segment
-   * @param {Point} p1 - Start point
-   * @param {Point} p2 - End point
-   * @param {number} count - Number of points
-   * @returns {Point[]} Array of points
+   * @param p1 - Start point
+   * @param p2 - End point
+   * @param count - Number of points
+   * @returns Array of points
    */
-  getPointsOnLine(p1, p2, count) {
-    const points = [];
+  private getPointsOnLine(p1: Point, p2: Point, count: number): { x: number; y: number }[] {
+    const points: { x: number; y: number }[] = [];
     const dx = (p2.x - p1.x) / (count + 1);
     const dy = (p2.y - p1.y) / (count + 1);
 
@@ -124,12 +129,10 @@ export class CanvasRenderer extends Renderer {
 
   /**
    * Render a single point
-   * @param {Point} point - The point to render
-   * @param {Object} [style] - Rendering style options
-   * @param {string} [style.fillStyle='red'] - Fill color
-   * @param {number} [style.radius=3] - Point radius
+   * @param point - The point to render
+   * @param style - Rendering style options
    */
-  renderPoint(point, style = {}) {
+  renderPoint(point: Point, style: RenderStyle = {}): void {
     const ctx = this.ctx;
     const radius = style.radius ?? 3;
 
@@ -141,12 +144,10 @@ export class CanvasRenderer extends Renderer {
 
   /**
    * Render an edge
-   * @param {Edge} edge - The edge to render
-   * @param {Object} [style] - Rendering style options
-   * @param {string} [style.strokeStyle='black'] - Stroke color
-   * @param {number} [style.lineWidth=1] - Line width
+   * @param edge - The edge to render
+   * @param style - Rendering style options
    */
-  renderEdge(edge, style = {}) {
+  renderEdge(edge: Edge, style: RenderStyle = {}): void {
     const ctx = this.ctx;
 
     ctx.strokeStyle = style.strokeStyle ?? 'black';
@@ -160,12 +161,10 @@ export class CanvasRenderer extends Renderer {
 
   /**
    * Render the circumcircle of a triangle
-   * @param {Triangle} triangle - The triangle
-   * @param {Object} [style] - Rendering style options
-   * @param {string} [style.strokeStyle='blue'] - Stroke color
-   * @param {number} [style.lineWidth=1] - Line width
+   * @param triangle - The triangle
+   * @param style - Rendering style options
    */
-  renderCircumcircle(triangle, style = {}) {
+  renderCircumcircle(triangle: Triangle, style: RenderStyle = {}): void {
     const ctx = this.ctx;
     const center = triangle.getCircumcenter();
     const radius = triangle.getCircumradius();
@@ -180,10 +179,10 @@ export class CanvasRenderer extends Renderer {
 
   /**
    * Resize the canvas
-   * @param {number} width - New width
-   * @param {number} height - New height
+   * @param width - New width
+   * @param height - New height
    */
-  resize(width, height) {
+  resize(width: number, height: number): void {
     super.resize(width, height);
     this.setup(width, height);
   }

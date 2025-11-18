@@ -1,26 +1,29 @@
-import { Point } from './Point.mjs';
+import { Point } from './Point';
 
 /**
  * Represents an edge (line segment) between two points.
  * Edges are undirected - (a, b) equals (b, a).
  */
 export class Edge {
+  public p1: Point;
+  public p2: Point;
+
   /**
    * Create an edge between two points
-   * @param {Point} p1 - First endpoint
-   * @param {Point} p2 - Second endpoint
+   * @param p1 - First endpoint
+   * @param p2 - Second endpoint
    */
-  constructor(p1, p2) {
+  constructor(p1: Point, p2: Point) {
     this.p1 = p1;
     this.p2 = p2;
   }
 
   /**
    * Check if this edge equals another edge (order-independent)
-   * @param {Edge} edge - The edge to compare
-   * @returns {boolean} True if edges have the same endpoints
+   * @param edge - The edge to compare
+   * @returns True if edges have the same endpoints
    */
-  equals(edge) {
+  equals(edge: Edge): boolean {
     return (
       (this.p1.equals(edge.p1) && this.p2.equals(edge.p2)) ||
       (this.p1.equals(edge.p2) && this.p2.equals(edge.p1))
@@ -29,10 +32,10 @@ export class Edge {
 
   /**
    * Check if this edge shares an endpoint with another edge
-   * @param {Edge} edge - The edge to compare
-   * @returns {boolean} True if edges share at least one endpoint
+   * @param edge - The edge to compare
+   * @returns True if edges share at least one endpoint
    */
-  sharesEndpointWith(edge) {
+  sharesEndpointWith(edge: Edge): boolean {
     return (
       this.p1.equals(edge.p1) ||
       this.p1.equals(edge.p2) ||
@@ -43,35 +46,35 @@ export class Edge {
 
   /**
    * Get the length of this edge
-   * @returns {number} The length
+   * @returns The length
    */
-  getLength() {
+  getLength(): number {
     return this.p1.distanceTo(this.p2);
   }
 
   /**
    * Get the squared length of this edge (faster than getLength)
-   * @returns {number} The squared length
+   * @returns The squared length
    */
-  getLengthSquared() {
+  getLengthSquared(): number {
     return this.p1.distanceToSquared(this.p2);
   }
 
   /**
    * Get the midpoint of this edge
-   * @returns {Point} The midpoint
+   * @returns The midpoint
    */
-  getMidpoint() {
+  getMidpoint(): Point {
     return this.p1.add(this.p2).div(2);
   }
 
   /**
    * Get points along this edge at regular intervals
-   * @param {number} count - Number of points to generate (excluding endpoints)
-   * @returns {Point[]} Array of points along the edge
+   * @param count - Number of points to generate (excluding endpoints)
+   * @returns Array of points along the edge
    */
-  getInterpolatedPoints(count) {
-    const points = [];
+  getInterpolatedPoints(count: number): Point[] {
+    const points: Point[] = [];
     const delta = this.p2.sub(this.p1).div(count + 1);
     for (let i = 1; i <= count; i++) {
       points.push(this.p1.add(delta.mult(i)));
@@ -81,26 +84,26 @@ export class Edge {
 
   /**
    * Create a string representation of this edge
-   * @returns {string} String representation
+   * @returns String representation
    */
-  toString() {
+  toString(): string {
     return `Edge(${this.p1.toString()} -> ${this.p2.toString()})`;
   }
 
   /**
    * Convert to array format [p1, p2]
-   * @returns {Point[]} Array of two points
+   * @returns Array of two points
    */
-  toArray() {
+  toArray(): Point[] {
     return [this.p1, this.p2];
   }
 
   /**
    * Create an Edge from an array of two points
-   * @param {Point[]} arr - Array containing two points
-   * @returns {Edge} A new Edge
+   * @param arr - Array containing two points
+   * @returns A new Edge
    */
-  static fromArray(arr) {
+  static fromArray(arr: Point[]): Edge {
     return new Edge(arr[0], arr[1]);
   }
 }

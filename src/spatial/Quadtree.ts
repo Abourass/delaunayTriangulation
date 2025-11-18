@@ -1,16 +1,21 @@
-import { Point } from '../core/Point.mjs';
+import { Point } from '../core/Point';
 
 /**
  * Rectangle bounds for quadtree regions
  */
 export class Bounds {
+  public x: number;
+  public y: number;
+  public width: number;
+  public height: number;
+
   /**
-   * @param {number} x - Left coordinate
-   * @param {number} y - Top coordinate
-   * @param {number} width - Width of bounds
-   * @param {number} height - Height of bounds
+   * @param x - Left coordinate
+   * @param y - Top coordinate
+   * @param width - Width of bounds
+   * @param height - Height of bounds
    */
-  constructor(x, y, width, height) {
+  constructor(x: number, y: number, width: number, height: number) {
     this.x = x;
     this.y = y;
     this.width = width;
@@ -19,10 +24,10 @@ export class Bounds {
 
   /**
    * Check if a point is within these bounds
-   * @param {Point} point - The point to check
-   * @returns {boolean} True if point is inside
+   * @param point - The point to check
+   * @returns True if point is inside
    */
-  contains(point) {
+  contains(point: Point): boolean {
     return (
       point.x >= this.x &&
       point.x < this.x + this.width &&
@@ -33,10 +38,10 @@ export class Bounds {
 
   /**
    * Check if these bounds intersect with another bounds
-   * @param {Bounds} other - The other bounds
-   * @returns {boolean} True if they intersect
+   * @param other - The other bounds
+   * @returns True if they intersect
    */
-  intersects(other) {
+  intersects(other: Bounds): boolean {
     return !(
       other.x > this.x + this.width ||
       other.x + other.width < this.x ||
@@ -47,12 +52,12 @@ export class Bounds {
 
   /**
    * Check if these bounds intersect with a circle
-   * @param {number} cx - Circle center x
-   * @param {number} cy - Circle center y
-   * @param {number} radius - Circle radius
-   * @returns {boolean} True if they intersect
+   * @param cx - Circle center x
+   * @param cy - Circle center y
+   * @param radius - Circle radius
+   * @returns True if they intersect
    */
-  intersectsCircle(cx, cy, radius) {
+  intersectsCircle(cx: number, cy: number, radius: number): boolean {
     // Find the closest point on the rectangle to the circle center
     const closestX = Math.max(this.x, Math.min(cx, this.x + this.width));
     const closestY = Math.max(this.y, Math.min(cy, this.y + this.height));
@@ -71,29 +76,34 @@ export class Bounds {
  * Enables O(log n) point queries instead of O(n)
  */
 export class Quadtree {
+  private bounds: Bounds;
+  private capacity: number;
+  private maxDepth: number;
+  private depth: number;
+  private points: Point[] = [];
+  private divided: boolean = false;
+  private northwest: Quadtree | null = null;
+  private northeast: Quadtree | null = null;
+  private southwest: Quadtree | null = null;
+  private southeast: Quadtree | null = null;
+
   /**
-   * @param {Bounds} bounds - The bounds of this node
-   * @param {number} [capacity=4] - Max points before subdivision
-   * @param {number} [maxDepth=8] - Maximum tree depth
-   * @param {number} [depth=0] - Current depth
+   * @param bounds - The bounds of this node
+   * @param capacity - Max points before subdivision
+   * @param maxDepth - Maximum tree depth
+   * @param depth - Current depth
    */
-  constructor(bounds, capacity = 4, maxDepth = 8, depth = 0) {
+  constructor(bounds: Bounds, capacity: number = 4, maxDepth: number = 8, depth: number = 0) {
     this.bounds = bounds;
     this.capacity = capacity;
     this.maxDepth = maxDepth;
     this.depth = depth;
-    this.points = [];
-    this.divided = false;
-    this.northwest = null;
-    this.northeast = null;
-    this.southwest = null;
-    this.southeast = null;
   }
 
   /**
    * Subdivide this node into four children
    */
-  subdivide() {
+  private subdivide(): void {
     const { x, y, width, height } = this.bounds;
     const halfWidth = width / 2;
     const halfHeight = height / 2;
@@ -113,10 +123,10 @@ export class Quadtree {
 
   /**
    * Insert a point into the quadtree
-   * @param {Point} point - The point to insert
-   * @returns {boolean} True if successfully inserted
+   * @param point - The point to insert
+   * @returns True if successfully inserted
    */
-  insert(point) {
+  insert(point: Point): boolean {
     if (!this.bounds.contains(point)) {
       return false;
     }
@@ -130,10 +140,10 @@ export class Quadtree {
       this.subdivide();
     }
 
-    if (this.northwest.insert(point)) return true;
-    if (this.northeast.insert(point)) return true;
-    if (this.southwest.insert(point)) return true;
-    if (this.southeast.insert(point)) return true;
+    if (this.northwest!.insert(point)) return true;
+    if (this.northeast!.insert(point)) return true;
+    if (this.southwest!.insert(point)) return true;
+    if (this.southeast!.insert(point)) return true;
 
     // Shouldn't reach here, but fallback to adding to current node
     this.points.push(point);
@@ -142,11 +152,11 @@ export class Quadtree {
 
   /**
    * Query all points within a rectangular range
-   * @param {Bounds} range - The query range
-   * @param {Point[]} [found] - Array to collect found points
-   * @returns {Point[]} Points within the range
+   * @param range - The query range
+   * @param found - Array to collect found points
+   * @returns Points within the range
    */
-  queryRange(range, found = []) {
+  queryRange(range: Bounds, found: Point[] = []): Point[] {
     if (!this.bounds.intersects(range)) {
       return found;
     }
@@ -158,10 +168,10 @@ export class Quadtree {
     }
 
     if (this.divided) {
-      this.northwest.queryRange(range, found);
-      this.northeast.queryRange(range, found);
-      this.southwest.queryRange(range, found);
-      this.southeast.queryRange(range, found);
+      this.northwest!.queryRange(range, found);
+      this.northeast!.queryRange(range, found);
+      this.southwest!.queryRange(range, found);
+      this.southeast!.queryRange(range, found);
     }
 
     return found;
@@ -169,13 +179,13 @@ export class Quadtree {
 
   /**
    * Query all points within a circular range
-   * @param {number} cx - Center x coordinate
-   * @param {number} cy - Center y coordinate
-   * @param {number} radius - Search radius
-   * @param {Point[]} [found] - Array to collect found points
-   * @returns {Point[]} Points within the circular range
+   * @param cx - Center x coordinate
+   * @param cy - Center y coordinate
+   * @param radius - Search radius
+   * @param found - Array to collect found points
+   * @returns Points within the circular range
    */
-  queryCircle(cx, cy, radius, found = []) {
+  queryCircle(cx: number, cy: number, radius: number, found: Point[] = []): Point[] {
     if (!this.bounds.intersectsCircle(cx, cy, radius)) {
       return found;
     }
@@ -190,10 +200,10 @@ export class Quadtree {
     }
 
     if (this.divided) {
-      this.northwest.queryCircle(cx, cy, radius, found);
-      this.northeast.queryCircle(cx, cy, radius, found);
-      this.southwest.queryCircle(cx, cy, radius, found);
-      this.southeast.queryCircle(cx, cy, radius, found);
+      this.northwest!.queryCircle(cx, cy, radius, found);
+      this.northeast!.queryCircle(cx, cy, radius, found);
+      this.southwest!.queryCircle(cx, cy, radius, found);
+      this.southeast!.queryCircle(cx, cy, radius, found);
     }
 
     return found;
@@ -201,16 +211,16 @@ export class Quadtree {
 
   /**
    * Find the nearest point to a given location
-   * @param {number} x - Query x coordinate
-   * @param {number} y - Query y coordinate
-   * @param {number} [maxDistance=Infinity] - Maximum search distance
-   * @returns {Point|null} Nearest point or null if none found
+   * @param x - Query x coordinate
+   * @param y - Query y coordinate
+   * @param maxDistance - Maximum search distance
+   * @returns Nearest point or null if none found
    */
-  findNearest(x, y, maxDistance = Infinity) {
-    let nearest = null;
+  findNearest(x: number, y: number, maxDistance: number = Infinity): Point | null {
+    let nearest: Point | null = null;
     let nearestDistSquared = maxDistance * maxDistance;
 
-    const search = (node) => {
+    const search = (node: Quadtree | null): void => {
       if (!node || !node.bounds.intersectsCircle(x, y, Math.sqrt(nearestDistSquared))) {
         return;
       }
@@ -227,7 +237,7 @@ export class Quadtree {
 
       if (node.divided) {
         // Search children closest to query point first
-        const children = [node.northwest, node.northeast, node.southwest, node.southeast];
+        const children = [node.northwest!, node.northeast!, node.southwest!, node.southeast!];
         children.sort((a, b) => {
           const aDist = this.distToBounds(x, y, a.bounds);
           const bDist = this.distToBounds(x, y, b.bounds);
@@ -246,12 +256,12 @@ export class Quadtree {
 
   /**
    * Calculate squared distance from point to bounds
-   * @param {number} x - Point x coordinate
-   * @param {number} y - Point y coordinate
-   * @param {Bounds} bounds - The bounds
-   * @returns {number} Squared distance
+   * @param x - Point x coordinate
+   * @param y - Point y coordinate
+   * @param bounds - The bounds
+   * @returns Squared distance
    */
-  distToBounds(x, y, bounds) {
+  private distToBounds(x: number, y: number, bounds: Bounds): number {
     const closestX = Math.max(bounds.x, Math.min(x, bounds.x + bounds.width));
     const closestY = Math.max(bounds.y, Math.min(y, bounds.y + bounds.height));
     const dx = x - closestX;
@@ -261,16 +271,16 @@ export class Quadtree {
 
   /**
    * Get all points in the quadtree
-   * @returns {Point[]} All points
+   * @returns All points
    */
-  getAllPoints() {
+  getAllPoints(): Point[] {
     const allPoints = [...this.points];
 
     if (this.divided) {
-      allPoints.push(...this.northwest.getAllPoints());
-      allPoints.push(...this.northeast.getAllPoints());
-      allPoints.push(...this.southwest.getAllPoints());
-      allPoints.push(...this.southeast.getAllPoints());
+      allPoints.push(...this.northwest!.getAllPoints());
+      allPoints.push(...this.northeast!.getAllPoints());
+      allPoints.push(...this.southwest!.getAllPoints());
+      allPoints.push(...this.southeast!.getAllPoints());
     }
 
     return allPoints;
@@ -278,16 +288,16 @@ export class Quadtree {
 
   /**
    * Get count of all points in the quadtree
-   * @returns {number} Total point count
+   * @returns Total point count
    */
-  size() {
+  size(): number {
     let count = this.points.length;
 
     if (this.divided) {
-      count += this.northwest.size();
-      count += this.northeast.size();
-      count += this.southwest.size();
-      count += this.southeast.size();
+      count += this.northwest!.size();
+      count += this.northeast!.size();
+      count += this.southwest!.size();
+      count += this.southeast!.size();
     }
 
     return count;
@@ -296,7 +306,7 @@ export class Quadtree {
   /**
    * Clear all points from the quadtree
    */
-  clear() {
+  clear(): void {
     this.points = [];
     this.divided = false;
     this.northwest = null;
@@ -307,13 +317,13 @@ export class Quadtree {
 
   /**
    * Create a quadtree from an array of points
-   * @param {Point[]} points - Points to insert
-   * @param {number} width - Canvas width
-   * @param {number} height - Canvas height
-   * @param {number} [capacity=4] - Node capacity
-   * @returns {Quadtree} New quadtree containing all points
+   * @param points - Points to insert
+   * @param width - Canvas width
+   * @param height - Canvas height
+   * @param capacity - Node capacity
+   * @returns New quadtree containing all points
    */
-  static fromPoints(points, width, height, capacity = 4) {
+  static fromPoints(points: Point[], width: number, height: number, capacity: number = 4): Quadtree {
     const bounds = new Bounds(0, 0, width, height);
     const tree = new Quadtree(bounds, capacity);
 

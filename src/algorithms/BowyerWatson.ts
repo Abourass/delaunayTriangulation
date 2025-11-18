@@ -1,5 +1,6 @@
-import { Triangle } from '../core/Triangle.mjs';
-import { Edge } from '../core/Edge.mjs';
+import { Triangle } from '../core/Triangle';
+import { Edge } from '../core/Edge';
+import { Point } from '../core/Point';
 
 /**
  * Bowyer-Watson algorithm for Delaunay triangulation.
@@ -12,16 +13,16 @@ import { Edge } from '../core/Edge.mjs';
 export class BowyerWatson {
   /**
    * Perform Delaunay triangulation on a set of points
-   * @param {Point[]} points - The points to triangulate
-   * @param {Triangle|number} superTriangleOrWidth - Either a super triangle or canvas width
-   * @param {number} [height] - Canvas height (only if second param is width)
-   * @returns {Triangle[]} Array of triangles forming the Delaunay triangulation
+   * @param points - The points to triangulate
+   * @param superTriangleOrWidth - Either a super triangle or canvas width
+   * @param height - Canvas height (only if second param is width)
+   * @returns Array of triangles forming the Delaunay triangulation
    */
-  static triangulate(points, superTriangleOrWidth, height) {
+  static triangulate(points: Point[], superTriangleOrWidth: Triangle | number, height?: number): Triangle[] {
     // Support both calling patterns:
     // 1. triangulate(points, superTriangle) - original
     // 2. triangulate(points, width, height) - convenience method
-    let superTriangle;
+    let superTriangle: Triangle;
 
     if (typeof superTriangleOrWidth === 'number') {
       // Called with width and height - create super triangle
@@ -49,10 +50,10 @@ export class BowyerWatson {
 
   /**
    * Add a single point to the triangulation
-   * @param {Triangle[]} triangulation - The current triangulation
-   * @param {Point} point - The point to add
+   * @param triangulation - The current triangulation
+   * @param point - The point to add
    */
-  static addPoint(triangulation, point) {
+  static addPoint(triangulation: Triangle[], point: Point): void {
     // Find all triangles whose circumcircle contains the point
     const badTriangles = this.findBadTriangles(triangulation, point);
 
@@ -68,11 +69,11 @@ export class BowyerWatson {
 
   /**
    * Find all triangles whose circumcircle contains the given point
-   * @param {Triangle[]} triangulation - The current triangulation
-   * @param {Point} point - The point to check
-   * @returns {Triangle[]} Array of "bad" triangles
+   * @param triangulation - The current triangulation
+   * @param point - The point to check
+   * @returns Array of "bad" triangles
    */
-  static findBadTriangles(triangulation, point) {
+  static findBadTriangles(triangulation: Triangle[], point: Point): Triangle[] {
     return triangulation.filter(triangle =>
       triangle.containsPointInCircumcircle(point)
     );
@@ -81,11 +82,11 @@ export class BowyerWatson {
   /**
    * Find the boundary polygon of a set of triangles
    * The boundary consists of edges that are not shared by any other triangle
-   * @param {Triangle[]} triangles - The triangles to find the boundary of
-   * @returns {Edge[]} Array of boundary edges
+   * @param triangles - The triangles to find the boundary of
+   * @returns Array of boundary edges
    */
-  static findBoundaryPolygon(triangles) {
-    const polygon = [];
+  static findBoundaryPolygon(triangles: Triangle[]): Edge[] {
+    const polygon: Edge[] = [];
 
     for (const triangle of triangles) {
       for (const edge of triangle.getEdges()) {
@@ -104,10 +105,10 @@ export class BowyerWatson {
 
   /**
    * Remove a set of triangles from the triangulation
-   * @param {Triangle[]} triangulation - The triangulation to modify
-   * @param {Triangle[]} trianglesToRemove - The triangles to remove
+   * @param triangulation - The triangulation to modify
+   * @param trianglesToRemove - The triangles to remove
    */
-  static removeTriangles(triangulation, trianglesToRemove) {
+  static removeTriangles(triangulation: Triangle[], trianglesToRemove: Triangle[]): void {
     for (const triangle of trianglesToRemove) {
       const index = triangulation.indexOf(triangle);
       if (index > -1) {
@@ -118,11 +119,11 @@ export class BowyerWatson {
 
   /**
    * Re-triangulate the hole by connecting boundary edges to a point
-   * @param {Triangle[]} triangulation - The triangulation to modify
-   * @param {Edge[]} polygon - The boundary polygon edges
-   * @param {Point} point - The point to connect edges to
+   * @param triangulation - The triangulation to modify
+   * @param polygon - The boundary polygon edges
+   * @param point - The point to connect edges to
    */
-  static retriangulateHole(triangulation, polygon, point) {
+  static retriangulateHole(triangulation: Triangle[], polygon: Edge[], point: Point): void {
     for (const edge of polygon) {
       const newTriangle = new Triangle(edge.p1, edge.p2, point);
       triangulation.push(newTriangle);
@@ -131,10 +132,10 @@ export class BowyerWatson {
 
   /**
    * Remove all triangles that share a vertex with the super triangle
-   * @param {Triangle[]} triangulation - The triangulation to clean
-   * @param {Triangle} superTriangle - The super triangle
+   * @param triangulation - The triangulation to clean
+   * @param superTriangle - The super triangle
    */
-  static removeSuperTriangleVertices(triangulation, superTriangle) {
+  static removeSuperTriangleVertices(triangulation: Triangle[], superTriangle: Triangle): void {
     let i = triangulation.length;
     while (i--) {
       if (triangulation[i].sharesVertexWith(superTriangle)) {
@@ -145,12 +146,12 @@ export class BowyerWatson {
 
   /**
    * Create a super triangle that contains all given points or fills a canvas
-   * @param {Point[]} points - The points to contain
-   * @param {number} widthOrMargin - Either canvas width or margin multiplier (default: 2)
-   * @param {number} [height] - Canvas height (only if widthOrMargin is width)
-   * @returns {Triangle} A super triangle
+   * @param points - The points to contain
+   * @param widthOrMargin - Either canvas width or margin multiplier (default: 2)
+   * @param height - Canvas height (only if widthOrMargin is width)
+   * @returns A super triangle
    */
-  static createSuperTriangle(points, widthOrMargin = 2, height) {
+  static createSuperTriangle(points: Point[], widthOrMargin: number = 2, height?: number): Triangle {
     if (points.length === 0) {
       throw new Error('Cannot create super triangle for empty point set');
     }
@@ -163,7 +164,6 @@ export class BowyerWatson {
       const width = widthOrMargin;
       const margin = Math.max(width, height);
 
-      const Point = points[0].constructor;
       return new Triangle(
         new Point(-margin, -margin),
         new Point(width + margin * 2, -margin),
@@ -195,7 +195,6 @@ export class BowyerWatson {
     // Create a triangle large enough to contain the bounding box
     const size = Math.max(boxWidth, boxHeight) * margin;
 
-    const Point = points[0].constructor;
     return new Triangle(
       new Point(centerX - size * 2, centerY + size),
       new Point(centerX + size * 2, centerY + size),

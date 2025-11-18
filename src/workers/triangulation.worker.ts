@@ -3,8 +3,8 @@
  * Keeps the main thread responsive while processing large point sets
  */
 
-import { Point, Triangle, Edge } from '../core/index.mjs';
-import { BowyerWatson } from '../algorithms/BowyerWatson.mjs';
+import { Point, Triangle, Edge } from '../core/index';
+import { BowyerWatson } from '../algorithms/BowyerWatson';
 
 interface TriangulationRequest {
   type: 'triangulate';
@@ -52,9 +52,9 @@ function toPoints(data: { x: number; y: number }[]): Point[] {
 // Convert Triangle instances to plain objects for serialization
 function serializeTriangles(triangles: Triangle[]): { p1: { x: number; y: number }; p2: { x: number; y: number }; p3: { x: number; y: number } }[] {
   return triangles.map((t) => ({
-    p1: { x: t.p1.x, y: t.p1.y },
-    p2: { x: t.p2.x, y: t.p2.y },
-    p3: { x: t.p3.x, y: t.p3.y },
+    p1: { x: t.a.x, y: t.a.y },
+    p2: { x: t.b.x, y: t.b.y },
+    p3: { x: t.c.x, y: t.c.y },
   }));
 }
 
@@ -94,7 +94,7 @@ function generateSteps(points: Point[], width: number, height: number): Algorith
       currentPoint: { x: point.x, y: point.y },
     });
 
-    const badTriangles = triangulation.filter((t) => t.circumcircleContains(point));
+    const badTriangles = triangulation.filter((t) => t.containsPointInCircumcircle(point));
 
     steps.push({
       type: 'find_bad',
@@ -152,7 +152,7 @@ function generateSteps(points: Point[], width: number, height: number): Algorith
     });
   }
 
-  triangulation = triangulation.filter((t) => !t.sharesVertex(superTriangle));
+  triangulation = triangulation.filter((t) => !t.sharesVertexWith(superTriangle));
 
   steps.push({
     type: 'cleanup',

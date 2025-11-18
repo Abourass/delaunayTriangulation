@@ -1,20 +1,37 @@
-import { Point } from '../core/Point.mjs';
+import { Point } from '../core/Point';
+
+/**
+ * Options for point generation
+ */
+export interface GeneratorOptions {
+  count?: number;
+  density?: number;
+  margin?: number;
+  rows?: number;
+  cols?: number;
+  spacing?: number;
+  jitter?: number;
+  rings?: number;
+  pointsPerRing?: number;
+  includeCenter?: boolean;
+  turns?: number;
+  minDistance?: number;
+  maxAttempts?: number;
+}
 
 /**
  * Strategy interface for generating points.
  * Different generators can create different distributions of points.
  */
-export class PointGenerator {
+export abstract class PointGenerator {
   /**
    * Generate points within a given area
-   * @param {number} width - Width of the area
-   * @param {number} height - Height of the area
-   * @param {Object} options - Generator-specific options
-   * @returns {Point[]} Array of generated points
+   * @param width - Width of the area
+   * @param height - Height of the area
+   * @param options - Generator-specific options
+   * @returns Array of generated points
    */
-  generate(width, height, options = {}) {
-    throw new Error('PointGenerator.generate() must be implemented by subclass');
-  }
+  abstract generate(width: number, height: number, options?: GeneratorOptions): Point[];
 }
 
 /**
@@ -23,15 +40,12 @@ export class PointGenerator {
 export class RandomPointGenerator extends PointGenerator {
   /**
    * Generate randomly distributed points
-   * @param {number} width - Width of the area
-   * @param {number} height - Height of the area
-   * @param {Object} options - Options for generation
-   * @param {number} [options.count] - Number of points to generate
-   * @param {number} [options.density] - Points per 10000 square units (alternative to count)
-   * @param {number} [options.margin=0.025] - Margin from edges as fraction of dimensions
-   * @returns {Point[]} Array of generated points
+   * @param width - Width of the area
+   * @param height - Height of the area
+   * @param options - Options for generation
+   * @returns Array of generated points
    */
-  generate(width, height, options = {}) {
+  generate(width: number, height: number, options: GeneratorOptions = {}): Point[] {
     const margin = options.margin ?? 0.025;
     let count = options.count;
 
@@ -46,7 +60,7 @@ export class RandomPointGenerator extends PointGenerator {
     const minY = height * margin;
     const maxY = height * (1 - margin);
 
-    const points = [];
+    const points: Point[] = [];
     for (let i = 0; i < count; i++) {
       points.push(new Point(
         Math.random() * (maxX - minX) + minX,
@@ -64,16 +78,12 @@ export class RandomPointGenerator extends PointGenerator {
 export class GridPointGenerator extends PointGenerator {
   /**
    * Generate points in a grid pattern
-   * @param {number} width - Width of the area
-   * @param {number} height - Height of the area
-   * @param {Object} options - Options for generation
-   * @param {number} [options.rows] - Number of rows
-   * @param {number} [options.cols] - Number of columns
-   * @param {number} [options.spacing] - Spacing between points (alternative)
-   * @param {number} [options.jitter=0] - Random offset as fraction of spacing
-   * @returns {Point[]} Array of generated points
+   * @param width - Width of the area
+   * @param height - Height of the area
+   * @param options - Options for generation
+   * @returns Array of generated points
    */
-  generate(width, height, options = {}) {
+  generate(width: number, height: number, options: GeneratorOptions = {}): Point[] {
     let rows = options.rows;
     let cols = options.cols;
 
@@ -91,7 +101,7 @@ export class GridPointGenerator extends PointGenerator {
     const spacingX = width / (cols + 1);
     const spacingY = height / (rows + 1);
 
-    const points = [];
+    const points: Point[] = [];
     for (let row = 1; row <= rows; row++) {
       for (let col = 1; col <= cols; col++) {
         const x = col * spacingX + (Math.random() - 0.5) * spacingX * jitter;
@@ -110,15 +120,12 @@ export class GridPointGenerator extends PointGenerator {
 export class CircularPointGenerator extends PointGenerator {
   /**
    * Generate points in concentric circles
-   * @param {number} width - Width of the area
-   * @param {number} height - Height of the area
-   * @param {Object} options - Options for generation
-   * @param {number} [options.rings=5] - Number of concentric rings
-   * @param {number} [options.pointsPerRing=8] - Points per ring
-   * @param {boolean} [options.includeCenter=true] - Include center point
-   * @returns {Point[]} Array of generated points
+   * @param width - Width of the area
+   * @param height - Height of the area
+   * @param options - Options for generation
+   * @returns Array of generated points
    */
-  generate(width, height, options = {}) {
+  generate(width: number, height: number, options: GeneratorOptions = {}): Point[] {
     const rings = options.rings ?? 5;
     const pointsPerRing = options.pointsPerRing ?? 8;
     const includeCenter = options.includeCenter ?? true;
@@ -127,7 +134,7 @@ export class CircularPointGenerator extends PointGenerator {
     const centerY = height / 2;
     const maxRadius = Math.min(width, height) * 0.4;
 
-    const points = [];
+    const points: Point[] = [];
 
     if (includeCenter) {
       points.push(new Point(centerX, centerY));
@@ -156,14 +163,12 @@ export class CircularPointGenerator extends PointGenerator {
 export class SpiralPointGenerator extends PointGenerator {
   /**
    * Generate points in a golden spiral pattern
-   * @param {number} width - Width of the area
-   * @param {number} height - Height of the area
-   * @param {Object} options - Options for generation
-   * @param {number} [options.count=50] - Number of points
-   * @param {number} [options.turns=8] - Number of spiral turns
-   * @returns {Point[]} Array of generated points
+   * @param width - Width of the area
+   * @param height - Height of the area
+   * @param options - Options for generation
+   * @returns Array of generated points
    */
-  generate(width, height, options = {}) {
+  generate(width: number, height: number, options: GeneratorOptions = {}): Point[] {
     const count = options.count ?? 50;
     const turns = options.turns ?? 8;
     const goldenAngle = Math.PI * (3 - Math.sqrt(5)); // ~137.5 degrees
@@ -172,7 +177,7 @@ export class SpiralPointGenerator extends PointGenerator {
     const centerY = height / 2;
     const maxRadius = Math.min(width, height) * 0.45;
 
-    const points = [];
+    const points: Point[] = [];
 
     for (let i = 0; i < count; i++) {
       const t = i / (count - 1);
@@ -195,15 +200,12 @@ export class SpiralPointGenerator extends PointGenerator {
 export class PoissonDiskPointGenerator extends PointGenerator {
   /**
    * Generate points with Poisson Disk Sampling
-   * @param {number} width - Width of the area
-   * @param {number} height - Height of the area
-   * @param {Object} options - Options for generation
-   * @param {number} [options.count=50] - Target number of points (approximate)
-   * @param {number} [options.minDistance] - Minimum distance between points
-   * @param {number} [options.maxAttempts=30] - Max attempts per active point
-   * @returns {Point[]} Array of generated points
+   * @param width - Width of the area
+   * @param height - Height of the area
+   * @param options - Options for generation
+   * @returns Array of generated points
    */
-  generate(width, height, options = {}) {
+  generate(width: number, height: number, options: GeneratorOptions = {}): Point[] {
     const count = options.count ?? 50;
     // Calculate minimum distance based on desired count
     const area = width * height;
@@ -213,22 +215,22 @@ export class PoissonDiskPointGenerator extends PointGenerator {
     const cellSize = minDistance / Math.sqrt(2);
     const gridWidth = Math.ceil(width / cellSize);
     const gridHeight = Math.ceil(height / cellSize);
-    const grid = new Array(gridWidth * gridHeight).fill(-1);
+    const grid: number[] = new Array(gridWidth * gridHeight).fill(-1);
 
-    const points = [];
-    const activeList = [];
+    const points: Point[] = [];
+    const activeList: number[] = [];
 
     const margin = minDistance;
 
     // Helper to get grid index
-    const gridIndex = (x, y) => {
+    const gridIndex = (x: number, y: number): number => {
       const gx = Math.floor(x / cellSize);
       const gy = Math.floor(y / cellSize);
       return gy * gridWidth + gx;
     };
 
     // Helper to check if point is valid
-    const isValid = (x, y) => {
+    const isValid = (x: number, y: number): boolean => {
       if (x < margin || x >= width - margin || y < margin || y >= height - margin) {
         return false;
       }
@@ -309,7 +311,7 @@ export class PoissonDiskPointGenerator extends PointGenerator {
  * Factory for creating point generators
  */
 export class PointGeneratorFactory {
-  static generators = {
+  private static generators: Record<string, new () => PointGenerator> = {
     random: RandomPointGenerator,
     grid: GridPointGenerator,
     circular: CircularPointGenerator,
@@ -319,19 +321,19 @@ export class PointGeneratorFactory {
 
   /**
    * Register a new generator type
-   * @param {string} name - Name of the generator
-   * @param {typeof PointGenerator} GeneratorClass - The generator class
+   * @param name - Name of the generator
+   * @param GeneratorClass - The generator class
    */
-  static register(name, GeneratorClass) {
+  static register(name: string, GeneratorClass: new () => PointGenerator): void {
     this.generators[name] = GeneratorClass;
   }
 
   /**
    * Create a generator by name
-   * @param {string} name - Name of the generator
-   * @returns {PointGenerator} A new generator instance
+   * @param name - Name of the generator
+   * @returns A new generator instance
    */
-  static create(name) {
+  static create(name: string): PointGenerator {
     const GeneratorClass = this.generators[name];
     if (!GeneratorClass) {
       throw new Error(`Unknown generator type: ${name}`);
@@ -341,9 +343,9 @@ export class PointGeneratorFactory {
 
   /**
    * Get list of available generator names
-   * @returns {string[]} Array of generator names
+   * @returns Array of generator names
    */
-  static getAvailableGenerators() {
+  static getAvailableGenerators(): string[] {
     return Object.keys(this.generators);
   }
 }
