@@ -63,21 +63,21 @@ export const VisualizationControls: Component = () => {
           optionTextValue="label"
           placeholder="Select color mode"
           itemComponent={(props) => (
-            <Select.Item item={props.item} class="select-item">
+            <Select.Item item={props.item} class="select__item">
               <Select.ItemLabel>{props.item.rawValue.label}</Select.ItemLabel>
-              <Select.ItemIndicator class="select-indicator">✓</Select.ItemIndicator>
+              <Select.ItemIndicator class="select__item-indicator">✓</Select.ItemIndicator>
             </Select.Item>
           )}
         >
-          <Select.Trigger class="select-trigger" aria-label="Color mode">
+          <Select.Trigger class="select__trigger" aria-label="Color mode">
             <Select.Value<ColorModeOption>>
               {(state) => state.selectedOption()?.label ?? 'Select color mode'}
             </Select.Value>
-            <Select.Icon class="select-icon">▼</Select.Icon>
+            <Select.Icon class="select__icon">▼</Select.Icon>
           </Select.Trigger>
           <Select.Portal>
-            <Select.Content class="select-content">
-              <Select.Listbox />
+            <Select.Content class="select__content">
+              <Select.Listbox class="select__listbox" />
             </Select.Content>
           </Select.Portal>
         </Select>
@@ -95,9 +95,9 @@ export const VisualizationControls: Component = () => {
           step={0.5}
           class="slider"
         >
-          <Slider.Track class="slider-track">
-            <Slider.Fill class="slider-fill" />
-            <Slider.Thumb class="slider-thumb">
+          <Slider.Track class="slider__track">
+            <Slider.Fill class="slider__fill" />
+            <Slider.Thumb class="slider__thumb">
               <Slider.Input />
             </Slider.Thumb>
           </Slider.Track>

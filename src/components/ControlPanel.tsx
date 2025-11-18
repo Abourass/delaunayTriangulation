@@ -9,20 +9,20 @@ export const ControlPanel: Component = () => {
     <aside class="control-panel">
       <h2>Delaunay Triangulation</h2>
 
-      <Collapsible defaultOpen={true} class="collapsible-section">
-        <Collapsible.Trigger class="collapsible-trigger">
+      <Collapsible defaultOpen={true} class="collapsible">
+        <Collapsible.Trigger class="collapsible__trigger">
           Generator Settings ▼
         </Collapsible.Trigger>
-        <Collapsible.Content class="collapsible-content">
+        <Collapsible.Content class="collapsible__content">
           <GeneratorControls />
         </Collapsible.Content>
       </Collapsible>
 
-      <Collapsible defaultOpen={true} class="collapsible-section">
-        <Collapsible.Trigger class="collapsible-trigger">
+      <Collapsible defaultOpen={true} class="collapsible">
+        <Collapsible.Trigger class="collapsible__trigger">
           Visualization ▼
         </Collapsible.Trigger>
-        <Collapsible.Content class="collapsible-content">
+        <Collapsible.Content class="collapsible__content">
           <VisualizationControls />
         </Collapsible.Content>
       </Collapsible>
