@@ -68,6 +68,13 @@ export function useTriangulation() {
   };
 
   const regenerate = () => {
+    const { width, height } = triangulationState.dimensions;
+
+    // Don't regenerate if canvas isn't set up yet
+    if (width === 0 || height === 0) {
+      return;
+    }
+
     const newPoints = generatePoints();
     const newTriangles = triangulate(newPoints);
 
@@ -82,6 +89,17 @@ export function useTriangulation() {
     () => [triangulationState.selectedGenerator, triangulationState.pointCount],
     () => {
       if (triangulationState.selectedGenerator !== 'interactive') {
+        regenerate();
+      }
+    }
+  ));
+
+  // Generate initial triangulation when canvas dimensions are first set
+  createEffect(on(
+    () => triangulationState.dimensions,
+    (dims, prevDims) => {
+      // Only run on first setup (dimensions go from 0,0 to actual size)
+      if (prevDims && prevDims.width === 0 && prevDims.height === 0 && dims.width > 0 && dims.height > 0) {
         regenerate();
       }
     }
